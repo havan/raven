@@ -1,0 +1,49 @@
+name: my-node-app
+version: 1
+backend: podman
+image: node:22-bookworm-slim
+
+source:
+  type: mount
+  path: /path/to/your/project
+  mount_path: /workspace
+
+network:
+  install_phase:
+    allowed_registries:
+      - registry.npmjs.org
+      - registry.yarnpkg.com
+      - github.com
+      - objects.githubusercontent.com
+    allow_dns: true
+  run_phase:
+    policy: open
+    allowed_hosts: []
+  port_forwards:
+    - host: 3000
+      container: 3000
+      protocol: tcp
+    - host: 5173
+      container: 5173
+      protocol: tcp
+
+env_vars:
+  NODE_ENV: development
+
+resources:
+  cpus: 4.0
+  memory: 4g
+
+setup_commands:
+  - cd /workspace && npm ci
+
+reinstall:
+  purge_dirs:
+    - node_modules
+  commands:
+    - cd /workspace && npm ci
+
+vscode:
+  extensions:
+    - dbaeumer.vscode-eslint
+    - esbenp.prettier-vscode
