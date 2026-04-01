@@ -299,15 +299,19 @@ against it, add a DNS rate-limiting rule to your nftables configuration.
 ## Development
 
 ```bash
-# Install with dev dependencies
-uv pip install -e ".[dev]" --python .venv/bin/python
+# First-time setup — creates .venv and installs all dependencies
+uv sync --dev
+
+# Run the CLI directly from the repo root
+uv run raven --help
 
 # Run tests
-.venv/bin/pytest tests/
+uv run pytest tests/             # all tests
+uv run pytest tests/unit/        # unit tests only (no Podman needed)
 
 # Lint and type-check
-.venv/bin/ruff check src/
-.venv/bin/mypy src/
+uv run ruff check src/
+uv run mypy src/
 ```
 
 See `examples/` for sample configs for Node.js and Python projects.

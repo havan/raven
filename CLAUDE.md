@@ -5,27 +5,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Commands
 
 ```bash
-# Set up the project venv (first time)
-uv venv
-uv pip install -e ".[dev]" --python .venv/bin/python
+# First-time setup (creates .venv and installs all deps)
+uv sync --dev
+
+# Run the CLI from the repo root
+uv run raven --help
+uv run raven --debug <command>
 
 # Run tests
-.venv/bin/pytest tests/
+uv run pytest tests/
+uv run pytest tests/unit/                          # unit only (no Podman needed)
+uv run pytest tests/unit/test_config.py            # single file
+uv run pytest tests/unit/test_config.py::test_name # single test
 
-# Run a single test file or test
-.venv/bin/pytest tests/unit/test_config.py
-.venv/bin/pytest tests/unit/test_config.py::test_name
-
-# Lint
-.venv/bin/ruff check src/
-
-# Type check
-.venv/bin/mypy src/
-
-# Run the CLI directly during development
-.venv/bin/raven --help
-.venv/bin/raven --debug <command>
+# Lint and type-check
+uv run ruff check src/
+uv run mypy src/
 ```
+
+`uv sync --dev` is the only setup step — uv creates the venv automatically. After that, every `uv run` command re-syncs if `pyproject.toml` changed.
 
 ## Architecture
 

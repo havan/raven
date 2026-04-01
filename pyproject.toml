@@ -33,5 +33,9 @@ packages = ["src/raven"]
 line-length = 100
 target-version = "py311"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v"
+
 [tool.mypy]
 strict = true
