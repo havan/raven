@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "raven"
+version = "0.1.0"
+description = "Isolated development environments with supply-chain attack protection"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.12",
+    "pyyaml>=6.0",
+    "pydantic>=2.0",
+    "rich>=13.0",
+    "dnspython>=2.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov",
+    "mypy>=1.8",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+raven = "raven.cli.app:main_entry"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/raven"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+strict = true
