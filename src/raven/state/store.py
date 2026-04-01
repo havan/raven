@@ -58,7 +58,7 @@ def delete_state(name: str) -> None:
 
 def list_env_names() -> list[str]:
     """Return names of all environments that have state on disk."""
-    envs_root = env_dir("").parent  # ~/.local/share/raven/envs/
+    envs_root = env_dir("")  # ~/.local/share/raven/envs/
     if not envs_root.exists():
         return []
     return sorted(
