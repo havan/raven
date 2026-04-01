@@ -42,8 +42,12 @@ from raven.cli.list_cmd import list_envs  # noqa: E402
 from raven.cli.code import code  # noqa: E402
 from raven.cli.ps import ps  # noqa: E402
 from raven.cli.export_cmd import export  # noqa: E402
+from raven.cli.init_cmd import init  # noqa: E402
+from raven.cli.edit_cmd import edit  # noqa: E402
 
 app.command(name="create")(create)
+app.command(name="init")(init)
+app.command(name="edit")(edit)
 app.command(name="start")(start)
 app.command(name="stop")(stop)
 app.command(name="shell")(shell)

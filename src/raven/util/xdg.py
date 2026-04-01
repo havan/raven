@@ -33,6 +33,11 @@ def logs_dir() -> Path:
     return data_dir() / "logs"
 
 
+def templates_dir() -> Path:
+    """~/.local/share/raven/templates/"""
+    return data_dir() / "templates"
+
+
 def quadlet_dir() -> Path:
     """~/.config/containers/systemd/"""
     return Path.home() / ".config" / "containers" / "systemd"
@@ -41,5 +46,5 @@ def quadlet_dir() -> Path:
 def ensure_dirs() -> None:
     """Create all required directories if they don't exist."""
     for d in [data_dir(), data_dir() / "envs", data_dir() / "networks",
-              nft_rules_dir(), logs_dir(), quadlet_dir()]:
+              nft_rules_dir(), logs_dir(), templates_dir(), quadlet_dir()]:
         d.mkdir(parents=True, exist_ok=True)
