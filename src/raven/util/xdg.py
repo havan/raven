@@ -39,12 +39,18 @@ def templates_dir() -> Path:
 
 
 def quadlet_dir() -> Path:
-    """~/.config/containers/systemd/"""
+    """~/.config/containers/systemd/ (legacy Quadlet files)"""
     return Path.home() / ".config" / "containers" / "systemd"
+
+
+def user_service_dir() -> Path:
+    """~/.config/systemd/user/ (plain systemd user unit files)"""
+    return Path.home() / ".config" / "systemd" / "user"
 
 
 def ensure_dirs() -> None:
     """Create all required directories if they don't exist."""
     for d in [data_dir(), data_dir() / "envs", data_dir() / "networks",
-              nft_rules_dir(), logs_dir(), templates_dir(), quadlet_dir()]:
+              nft_rules_dir(), logs_dir(), templates_dir(),
+              quadlet_dir(), user_service_dir()]:
         d.mkdir(parents=True, exist_ok=True)

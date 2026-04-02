@@ -10,10 +10,9 @@ from datetime import datetime, timezone
 from raven.backends.base import Backend, EnvInfo
 from raven.backends.podman.systemd import (
     container_name,
-    generate_container_quadlet,
-    generate_network_quadlet,
+    generate_container_service,
     network_name,
-    remove_quadlet_files,
+    remove_service_files,
 )
 from raven.config.schema import EnvConfig, SourceClone, VSCodeConfig
 from raven.state.models import EnvState, EnvStatus, NetworkPhase
@@ -51,9 +50,19 @@ class PodmanBackend(Backend):
         ssh_port = _find_free_port()
         log.info("Assigned SSH port %d for environment '%s'", ssh_port, config.name)
 
-        # Generate Quadlet files
-        generate_network_quadlet(config)
-        generate_container_quadlet(config, ssh_port)
+        # Create the podman network for this environment
+        run([
+            "podman", "network", "create",
+            "--ignore",
+            "--driver=bridge",
+            "--label", f"raven.env={config.name}",
+            "--label", "raven.managed=true",
+            network_name(config.name),
+        ])
+        log.info("Created podman network '%s'", network_name(config.name))
+
+        # Generate the systemd service unit
+        generate_container_service(config, ssh_port)
 
         # Reload systemd to pick up new unit files
         run(["systemctl", "--user", "daemon-reload"])
@@ -77,11 +86,24 @@ class PodmanBackend(Backend):
     def start(self, name: str) -> None:
         state = load_state(name)
         if state.status == EnvStatus.RUNNING:
-            log.warning("Environment '%s' is already running", name)
-            return
+            # Verify it's actually running before trusting state
+            if self.status(name) == EnvStatus.RUNNING:
+                log.warning("Environment '%s' is already running", name)
+                return
+            log.warning("State says running but container is not — restarting")
 
         svc = _service_name(name)
-        run(["systemctl", "--user", "start", f"{svc}.service"])
+        # Clear any previous failure state so systemd allows a fresh start
+        run(["systemctl", "--user", "reset-failed", f"{svc}.service"], check=False)
+
+        result = run(["systemctl", "--user", "start", f"{svc}.service"], check=False)
+        if result.returncode != 0:
+            err = (result.stderr or "").strip() or "(no stderr)"
+            raise RuntimeError(
+                f"Failed to start service '{svc}.service'.\n"
+                f"Hint: systemctl --user status {svc}.service\n"
+                f"systemd error: {err}"
+            )
 
         # Wait for container to be running
         self._wait_for_running(name)
@@ -113,8 +135,8 @@ class PodmanBackend(Backend):
             pass
 
         svc = _service_name(name)
-        # Remove Quadlet files
-        remove_quadlet_files(name)
+        # Remove service unit files (and legacy Quadlet files if present)
+        remove_service_files(name)
         run(["systemctl", "--user", "daemon-reload"])
 
         # Clean up the Podman network
@@ -287,14 +309,35 @@ class PodmanBackend(Backend):
         import time
 
         cname = container_name(name)
+        svc = _service_name(name)
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
+            # Check if the systemd service itself has failed
+            svc_result = run(
+                ["systemctl", "--user", "is-failed", f"{svc}.service"],
+                check=False,
+            )
+            if svc_result.stdout.strip() == "failed":
+                raise RuntimeError(
+                    f"Service '{svc}.service' failed to start.\n"
+                    f"Run: systemctl --user status {svc}.service\n"
+                    f"Run: journalctl --user -u {svc}.service"
+                )
+
             result = run(
                 ["podman", "inspect", "--format", "{{.State.Status}}", cname],
                 check=False,
             )
-            if result.returncode == 0 and result.stdout.strip().lower() == "running":
-                return
+            if result.returncode == 0:
+                podman_status = result.stdout.strip().lower()
+                if podman_status == "running":
+                    return
+                if podman_status in ("exited", "dead", "stopping"):
+                    raise RuntimeError(
+                        f"Container '{cname}' exited unexpectedly (status: {podman_status}).\n"
+                        f"Run: systemctl --user status {svc}.service\n"
+                        f"Run: journalctl --user -u {svc}.service"
+                    )
             time.sleep(0.5)
         raise TimeoutError(
             f"Container '{cname}' did not reach running state within {timeout}s"
