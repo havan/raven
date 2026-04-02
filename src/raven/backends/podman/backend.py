@@ -186,6 +186,13 @@ class PodmanBackend(Backend):
             check=False,
         )
 
+        # Remove VS Code SSH config entry if it exists
+        from raven.backends.podman.vscode import remove_ssh_config
+        try:
+            remove_ssh_config(name)
+        except Exception as exc:
+            log.warning("Could not remove SSH config for '%s': %s", name, exc)
+
         # Remove state
         delete_state(name)
         log.info("Environment '%s' destroyed", name)
