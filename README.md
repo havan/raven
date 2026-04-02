@@ -71,57 +71,42 @@ systemd user services.
 
 ## Quick start
 
-1. Create a `raven.yaml` in your project directory:
-
-```yaml
-name: my-node-app
-version: 1
-backend: podman
-image: mcr.microsoft.com/devcontainers/base:ubuntu
-
-source:
-  type: mount
-  path: /path/to/your/project
-  mount_path: /workspace
-
-network:
-  install_phase:
-    allowed_hosts:
-      - registry.npmjs.org
-      - github.com
-  run_phase:
-    policy: open
-  port_forwards:
-    - host: 3000
-      container: 3000
-
-setup_commands:
-  - cd /workspace && npm ci
-
-vscode:
-  extensions:
-    - dbaeumer.vscode-eslint
-    - esbenp.prettier-vscode
-```
-
-2. Create and start the environment:
+1. Initialize an environment from a Git repo:
 
 ```bash
-raven create my-node-app --config raven.yaml --start
+raven init my-node-app https://github.com/owner/my-node-app
 ```
 
-3. Install dependencies with network isolation:
+`raven init` clones the repo, detects the package manager from lockfiles, and
+prompts you to choose a run-phase network policy:
+
+```
+Run phase network policy:
+  1. open       — Full internet access
+  2. restricted — Only allowed hosts (configure with raven allow)
+  3. offline    — No outbound network access
+Choose policy (number or name) [1]:
+```
+
+2. Install dependencies with network isolation:
 
 ```bash
 raven install my-node-app
 ```
 
-4. Work in the environment:
+3. Work in the environment:
 
 ```bash
 raven shell my-node-app          # interactive shell
 raven code my-node-app           # VS Code Remote SSH
 raven run my-node-app npm test   # run a command
+```
+
+4. If you need to reach a host that isn't in your allowlist:
+
+```bash
+raven allow my-node-app deb.debian.org   # add host and apply rules immediately
+raven network status my-node-app         # inspect current policy and active CIDRs
 ```
 
 ## Commands
