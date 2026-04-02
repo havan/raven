@@ -109,13 +109,23 @@ def destroy(
     if backend is not None:
         try:
             backend.destroy(name)
+
+            # Metadata cleanup (idempotent, backends might have done some of this)
+            try:
+                delete_state(name)
+                if e_dir.exists():
+                    import shutil
+                    shutil.rmtree(e_dir, ignore_errors=True)
+            except Exception as e:
+                log.warning("Final metadata cleanup for '%s' had issues: %s", name, e)
+
             console.print(f"[red]Environment '{name}' destroyed.[/red]")
         except Exception as exc:
             log.warning("Backend destroy failed for '%s': %s", name, exc)
             console.print(f"[yellow]Warning:[/yellow] Backend cleanup failed: {exc}")
             console.print(
-                f"[dim]The environment state was NOT removed. You may need to manually clean up resources\n"
-                f"and then run 'raven destroy {name}' again.[/dim]"
+                f"[dim]The environment state might still exist. You may need to manually clean up resources\n"
+                f"under {e_dir} and then run 'raven destroy {name}' again.[/dim]"
             )
             raise typer.Exit(1)
 
