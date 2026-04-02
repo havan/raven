@@ -24,9 +24,9 @@ def ensure_network(env_name: str) -> str:
         name,
     ], check=False)
     if result.returncode == 0:
-        log.info("Created network: %s", name)
+        log.info("Ensured network exists: %s", name)
     else:
-        log.debug("Network %s already exists", name)
+        log.warning("Failed to create network %s: %s", name, result.stderr.strip())
     return name
 
 
