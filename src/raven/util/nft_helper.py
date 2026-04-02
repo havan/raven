@@ -13,19 +13,31 @@ import subprocess
 import sys
 from pathlib import Path
 
+from raven.util.xdg import data_dir
+
 
 def get_user_data_dir() -> Path:
     """Determine the raven data directory for the original user who invoked sudo."""
     sudo_user = os.environ.get("SUDO_USER")
     if sudo_user:
         try:
-            home = Path(pwd.getpwnam(sudo_user).pw_dir)
-            return home / ".local" / "share" / "raven"
+            pw = pwd.getpwnam(sudo_user)
+            # Temporarily spoof HOME to the original user's home to let Path.home()
+            # and expanduser() work as expected inside data_dir()
+            orig_home = os.environ.get("HOME")
+            os.environ["HOME"] = pw.pw_dir
+            try:
+                return data_dir()
+            finally:
+                if orig_home is not None:
+                    os.environ["HOME"] = orig_home
+                else:
+                    os.environ.pop("HOME", None)
         except (KeyError, ImportError):
             pass
-    # Fallback to current user (root or whatever is running)
-    base = os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
-    return Path(base) / "raven"
+
+    # Fallback to current user resolution (which is root/sudo if not caught above)
+    return data_dir()
 
 
 def main() -> None:
