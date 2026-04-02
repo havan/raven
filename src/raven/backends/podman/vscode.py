@@ -48,6 +48,7 @@ def setup_vscode_ssh(name: str, config: VSCodeConfig) -> dict[str, str]:
         "sh", "-c",
         f"mkdir -p /root/.ssh && "
         f"echo {encoded} | base64 -d >> /root/.ssh/authorized_keys && "
+        f"echo >> /root/.ssh/authorized_keys && "
         f"chmod 700 /root/.ssh && chmod 600 /root/.ssh/authorized_keys",
     ])
 
