@@ -1,4 +1,4 @@
-"""raven ps — show running processes and resource usage."""
+"""raven top — show running processes and resource usage inside an environment."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from raven.util.xdg import env_dir
 log = logging.getLogger(__name__)
 
 
-def ps(
+def top(
     name: str = typer.Argument(help="Environment name."),
 ) -> None:
     """Show processes, ports, and resource usage for an environment."""

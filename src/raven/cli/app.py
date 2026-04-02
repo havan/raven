@@ -38,10 +38,10 @@ def main(
 
 # Import and register sub-commands
 from raven.cli.create import create  # noqa: E402
-from raven.cli.env_commands import destroy, install, reinstall, run_cmd, shell, start, stop  # noqa: E402
-from raven.cli.list_cmd import list_envs  # noqa: E402
+from raven.cli.env_commands import destroy, install, reinstall, restart, run_cmd, shell, start, stop  # noqa: E402
+from raven.cli.list_cmd import list_cmd, ps  # noqa: E402
 from raven.cli.code import code  # noqa: E402
-from raven.cli.ps import ps  # noqa: E402
+from raven.cli.top_cmd import top  # noqa: E402
 from raven.cli.export_cmd import export
 from raven.cli.init_cmd import init
 from raven.cli.edit_cmd import edit
@@ -57,15 +57,18 @@ app.command(name="setup")(setup)
 app.command(name="edit")(edit)
 app.command(name="start")(start)
 app.command(name="stop")(stop)
+app.command(name="restart")(restart)
 app.command(name="shell")(shell)
 app.command(name="destroy")(destroy)
 app.command(name="install")(install)
 app.command(name="reinstall")(reinstall)
 app.command(name="run")(run_cmd)
-app.command(name="list")(list_envs)
+app.command(name="list")(list_cmd)
+app.command(name="ls")(list_cmd)
 app.command(name="status")(status)
 app.command(name="logs")(logs)
 app.command(name="code")(code)
+app.command(name="top")(top)
 app.command(name="ps")(ps)
 app.command(name="export")(export)
 app.add_typer(network_app, name="network")

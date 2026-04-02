@@ -90,6 +90,10 @@ class Backend(ABC):
         """Launch VS Code connected to the environment."""
 
     @abstractmethod
+    def get_stats(self, name: str) -> dict[str, str]:
+        """Get live resource usage (CPU, Memory)."""
+
+    @abstractmethod
     def get_processes(self, name: str) -> dict[str, Any]:
         """Get live process list and resource usage.
 

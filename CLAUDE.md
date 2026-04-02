@@ -52,7 +52,7 @@ Raven is a CLI tool that creates isolated dev environments (rootless Podman cont
 - **`network/phases.py`** — `switch_phase(env_name, phase, network_config)`. Install phase: resolve IPs → write rule file → apply. Run/open phase: `nft delete table`.
 - **`util/subprocess.py`** — `run()` for captured output, `stream_exec()` for inherited terminal, `exec_replace()` for shell/interactive commands (`os.execvp`).
 - **`util/xdg.py`** — All XDG paths in one place: `data_dir()`, `env_dir(name)`, `nft_rules_dir()`, `quadlet_dir()`.
-- **`cli/app.py`** — Typer app with global `--verbose`/`--debug`/`--log-file` options that call `setup_logging()` before any command runs.
+- **`cli/app.py`** — Typer app with global `--verbose`/`--debug`/`--log-file` options. Registers commands: `list` (alias `ls`), `status`, `ps`, `top`, etc.
 
 ### Backend pluggability
 
@@ -76,3 +76,4 @@ Rules use the OUTPUT chain (not FORWARD) because rootless Podman with netavark+p
 
 `raven code <name>` uses SSH mode (not devcontainer attach). This makes it backend-agnostic — the same code path will work when Firecracker is implemented. The SSH port is assigned at `raven create` time (random free port stored in `state.json`).
 tored in `state.json`).
+tate.json`).

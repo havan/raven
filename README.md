@@ -122,8 +122,10 @@ raven network status my-node-app         # inspect current policy and active CID
 | `raven reinstall <name>` | Re-run installs on demand (see below) |
 | `raven run <name> <cmd...>` | Run a command inside the environment |
 | `raven code <name>` | Open VS Code via Remote SSH |
-| `raven list` | List all environments with status |
-| `raven ps <name>` | Show processes, ports, and resource usage |
+| `raven list` | List all environments (alias: `ls`) |
+| `raven status [name]` | Detailed info for one env, or list all if no name |
+| `raven top <name>` | Show processes and resource usage inside an environment |
+| `raven ps [name]` | Alias for `list` (no name) or `top` (with name) |
 | `raven export <name>` | Print the config YAML (use `--portable` for sharing) |
 | `raven destroy <name>` | Stop and remove the environment |
 | `raven network status <name>` | Show current network policy, allowed hosts, and active CIDRs |

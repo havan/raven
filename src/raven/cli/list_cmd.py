@@ -2,6 +2,7 @@
 from __future__ import annotations
 import logging
 from datetime import datetime, timezone
+from typing import Optional
 import typer
 from rich.table import Table
 from raven.backends import get_backend
@@ -60,11 +61,10 @@ def _format_uptime(started_at_str: str | None) -> str:
 
 
 def list_envs(
-    refresh: bool = typer.Option(
-        False, "--refresh", "-r", help="Refresh live status from backend."
-    ),
+    refresh: bool = False,
+    stats: bool = False,
 ) -> None:
-    """List all raven-managed environments."""
+    """Core logic to list all raven-managed environments."""
     names = list_env_names()
     if not names:
         console.print("[dim]No environments found.[/dim]")
@@ -74,10 +74,13 @@ def list_envs(
     table.add_column("Name", style="bold")
     table.add_column("Status")
     table.add_column("Uptime")
+    if stats:
+        table.add_column("CPU")
+        table.add_column("Memory")
     table.add_column("Backend", style="dim")
     table.add_column("SSH Port", style="dim")
-    table.add_column("Network Phase", style="dim")
-    table.add_column("Created")
+    table.add_column("Network", style="dim")
+    table.add_column("Created", style="dim")
 
     for name in names:
         try:
@@ -96,17 +99,61 @@ def list_envs(
                 else "-"
             )
 
-            table.add_row(
+            row = [
                 state.name,
                 f"[{style}]{state.status.value}[/{style}]",
                 uptime,
+            ]
+            
+            if stats:
+                if state.status == EnvStatus.RUNNING:
+                    try:
+                        config = load_config(env_dir(name) / "config.yaml")
+                        backend = get_backend(config)
+                        res = backend.get_stats(name)
+                        row.append(res.get("cpu", "-"))
+                        row.append(res.get("memory", "-"))
+                    except Exception:
+                        row.append("-")
+                        row.append("-")
+                else:
+                    row.append("-")
+                    row.append("-")
+
+            row.extend([
                 state.backend,
                 str(state.ssh_port) if state.ssh_port else "-",
                 state.network_phase.value,
                 state.created_at[:19] if state.created_at else "-",
-            )
+            ])
+            table.add_row(*row)
         except Exception as e:
-            table.add_row(name, f"[red]error: {e}[/red]", "", "", "", "", "")
+            table.add_row(name, f"[red]error: {e}[/red]", "", *([ "" ] * (6 if stats else 4)))
 
     console.print(table)
+
+
+def list_cmd(
+    refresh: bool = typer.Option(
+        False, "--refresh", "-r", help="Refresh live status from backend."
+    ),
+    stats: bool = typer.Option(
+        False, "--stats", "-s", help="Show live CPU and memory usage (slower)."
+    ),
+) -> None:
+    """List all raven-managed environments."""
+    list_envs(refresh=refresh, stats=stats)
+
+
+def ps(
+    name: Optional[str] = typer.Argument(None, help="Environment name. If provided, shows processes inside."),
+    refresh: bool = typer.Option(False, "--refresh", "-r", help="Refresh live status from backend (if listing)."),
+    stats: bool = typer.Option(False, "--stats", "-s", help="Show live CPU and memory usage (if listing)."),
+) -> None:
+    """List environments or show processes for one."""
+    if name:
+        from raven.cli.top_cmd import top as top_cmd
+        top_cmd(name)
+    else:
+        list_envs(refresh=refresh, stats=stats)
 

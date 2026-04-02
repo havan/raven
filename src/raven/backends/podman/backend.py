@@ -98,6 +98,14 @@ class PodmanBackend(Backend):
                 return
             log.warning("State says running but container is not — restarting")
 
+        # Regenerate the service unit from config so any changes (ports, env,
+        # resources) are always applied before the container starts.
+        from raven.config.loader import load_config
+        from raven.util.xdg import env_dir
+        config = load_config(env_dir(name) / "config.yaml")
+        generate_container_service(config, state.ssh_port)
+        run(["systemctl", "--user", "daemon-reload"])
+
         svc = _service_name(name)
         # Clear any previous failure state so systemd allows a fresh start
         run(["systemctl", "--user", "reset-failed", f"{svc}.service"], check=False)
@@ -116,6 +124,15 @@ class PodmanBackend(Backend):
 
         state.status = EnvStatus.RUNNING
         state.started_at = datetime.now(timezone.utc).isoformat()
+
+        # Store the actual container ID (hex) so nft_helper can verify cgroup membership.
+        id_result = run(
+            ["podman", "inspect", "--format", "{{.Id}}", container_name(name)],
+            check=False,
+        )
+        if id_result.returncode == 0 and id_result.stdout.strip():
+            state.container_id = id_result.stdout.strip()
+
         save_state(state)
 
         # Apply the configured run-phase network policy now that the container is up.
@@ -366,6 +383,29 @@ class PodmanBackend(Backend):
     def launch_vscode(self, name: str, workspace: str) -> None:
         from raven.backends.podman.vscode import launch_vscode
         launch_vscode(name, workspace)
+
+    def get_stats(self, name: str) -> dict[str, str]:
+        """Get live resource usage (CPU, Memory) from Podman."""
+        cname = container_name(name)
+        stats = run(
+            [
+                "podman",
+                "stats",
+                "--no-stream",
+                "--format",
+                "{{.CPUPerc}}\t{{.MemUsage}}",
+                cname,
+            ],
+            check=False,
+        )
+        if stats.returncode == 0 and stats.stdout.strip():
+            parts = stats.stdout.strip().split("\t")
+            if len(parts) >= 2:
+                return {
+                    "cpu": parts[0].strip(),
+                    "memory": parts[1].strip(),
+                }
+        return {"cpu": "-", "memory": "-"}
 
     def _wait_for_running(self, name: str, timeout: int = 30) -> None:
         """Poll until the container is running."""

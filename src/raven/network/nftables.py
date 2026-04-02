@@ -35,12 +35,20 @@ def generate_install_rules(env_name: str, cidrs: list[str], resolvers: list[str]
     # Only allow DNS if we have an allowlist (otherwise DNS is useless and a tunneling risk)
     dns_rules = ""
     if cidrs and resolvers:
-        resolver_elements = ", ".join(resolvers)
-        dns_rules = f"""\
-        # Allow DNS (only to trusted resolvers)
-        udp daddr {{ {resolver_elements} }} dport 53 accept
-        tcp daddr {{ {resolver_elements} }} dport 53 accept
-"""
+        v4_resolvers = [r for r in resolvers if ":" not in r]
+        v6_resolvers = [r for r in resolvers if ":" in r]
+        
+        dns_rules_list = ["        # Allow DNS (only to trusted resolvers)"]
+        if v4_resolvers:
+            v4_elements = ", ".join(v4_resolvers)
+            dns_rules_list.append(f"        ip daddr {{ {v4_elements} }} udp dport 53 accept")
+            dns_rules_list.append(f"        ip daddr {{ {v4_elements} }} tcp dport 53 accept")
+        if v6_resolvers:
+            v6_elements = ", ".join(v6_resolvers)
+            dns_rules_list.append(f"        ip6 daddr {{ {v6_elements} }} udp dport 53 accept")
+            dns_rules_list.append(f"        ip6 daddr {{ {v6_elements} }} tcp dport 53 accept")
+        
+        dns_rules = "\n".join(dns_rules_list) + "\n"
     elif cidrs:
         log.warning("No resolvers found for '%s' — DNS access will be blocked.", env_name)
     else:

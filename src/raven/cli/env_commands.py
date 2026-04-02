@@ -281,6 +281,18 @@ def reinstall(
     console.print("[green]Reinstall completed successfully.[/green]")
 
 
+def restart(
+    name: str = typer.Argument(help="Environment name."),
+) -> None:
+    """Restart an environment (stop then start)."""
+    backend, _ = _get_backend_for_env(name)
+    state = load_state(name)
+    if state.status == EnvStatus.RUNNING:
+        backend.stop(name)
+    backend.start(name)
+    console.print(f"[green]Environment '{name}' restarted.[/green]")
+
+
 def run_cmd(
     name: str = typer.Argument(help="Environment name."),
     command: list[str] = typer.Argument(help="Command to run inside the environment."),

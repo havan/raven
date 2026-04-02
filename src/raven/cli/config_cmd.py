@@ -8,9 +8,13 @@ from typing import Optional
 
 import typer
 
+from raven.backends.podman.systemd import generate_container_service
 from raven.config.loader import load_config, save_config
 from raven.config.schema import EnvConfig, PortForward
+from raven.state.models import EnvStatus
+from raven.state.store import load_state, state_exists
 from raven.util.console import console
+from raven.util.subprocess import run
 from raven.util.xdg import env_dir
 
 log = logging.getLogger(__name__)
@@ -20,6 +24,20 @@ config_app = typer.Typer(
     help="Manage environment configuration.",
     no_args_is_help=True,
 )
+
+
+def _regenerate_unit(name: str, cfg: EnvConfig) -> None:
+    """Regenerate the systemd service unit, reload the daemon, and warn if restart is needed."""
+    if not state_exists(name):
+        return
+    state = load_state(name)
+    generate_container_service(cfg, state.ssh_port)
+    run(["systemctl", "--user", "daemon-reload"])
+    if state.status == EnvStatus.RUNNING:
+        console.print(
+            f"[yellow]Container is running — restart required to apply changes:[/yellow] "
+            f"[bold]raven restart {name}[/bold]"
+        )
 
 
 def _load(name: str) -> tuple[EnvConfig, Path]:
@@ -70,6 +88,7 @@ def config_env(
     cfg, path = _load(name)
     cfg.env_vars.update(parsed)
     save_config(cfg, path)
+    _regenerate_unit(name, cfg)
 
     for k, v in parsed.items():
         console.print(f"  [cyan]{k}[/cyan] = {v}")
@@ -130,6 +149,7 @@ def config_ports(
             PortForward(host=host_port, container=container_port, protocol=protocol)  # type: ignore[arg-type]
         )
         save_config(cfg, path)
+        _regenerate_unit(name, cfg)
         console.print(f"[green]Added port forward {host_port}:{container_port}/{protocol} to '{name}'.[/green]")
 
     else:  # remove
@@ -142,6 +162,7 @@ def config_ports(
             console.print(f"[yellow]No matching port forward {host_port}:{container_port}/{protocol} found.[/yellow]")
             raise typer.Exit(1)
         save_config(cfg, path)
+        _regenerate_unit(name, cfg)
         console.print(f"[green]Removed port forward {host_port}:{container_port}/{protocol} from '{name}'.[/green]")
 
 
@@ -174,6 +195,7 @@ def config_resources(
         changed.append(f"cpus = {cpus}")
 
     save_config(cfg, path)
+    _regenerate_unit(name, cfg)
     for c in changed:
         console.print(f"  [cyan]{c}[/cyan]")
     console.print(f"[green]Updated resources for '{name}'.[/green]")
