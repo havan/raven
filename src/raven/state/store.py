@@ -45,15 +45,16 @@ def delete_state(name: str) -> None:
     if path.exists():
         path.unlink()
         log.debug("Deleted state: %s", path)
-    # Also remove config.yaml and the directory if now empty
+    # Also remove config.yaml and the directory if now empty (skip sub-directories)
     d = env_dir(name)
     if d.exists():
         for child in d.iterdir():
-            child.unlink(missing_ok=True)
+            if child.is_file() or child.is_symlink():
+                child.unlink(missing_ok=True)
         try:
             d.rmdir()
         except OSError:
-            pass  # directory not empty (SSH keys, etc.) — leave it
+            pass  # directory not empty — leave it
 
 
 def list_env_names() -> list[str]:

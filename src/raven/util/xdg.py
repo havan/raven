@@ -48,6 +48,12 @@ def user_service_dir() -> Path:
     return Path.home() / ".config" / "systemd" / "user"
 
 
+def git_root() -> Path:
+    """Root directory for git clones. Reads RAVEN_GIT_ROOT env var, defaults to ~/git."""
+    base = os.environ.get("RAVEN_GIT_ROOT", os.path.expanduser("~/git"))
+    return Path(base)
+
+
 def ensure_dirs() -> None:
     """Create all required directories if they don't exist."""
     for d in [data_dir(), data_dir() / "envs", data_dir() / "networks",

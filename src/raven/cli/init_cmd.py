@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -16,7 +17,7 @@ from raven.backends import get_backend
 from raven.config.loader import save_config
 from raven.config.schema import EnvConfig
 from raven.util.console import console
-from raven.util.xdg import ensure_dirs, env_dir, templates_dir
+from raven.util.xdg import ensure_dirs, env_dir, git_root, templates_dir
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +58,27 @@ def ensure_templates() -> None:
             t_path.write_text(yaml.dump(content, default_flow_style=False, sort_keys=False))
 
 
+def _parse_git_url(url: str) -> tuple[str, str]:
+    """Return (owner, repo) parsed from a git URL.
+
+    Handles HTTPS (https://github.com/owner/repo[.git]) and
+    SSH (git@github.com:owner/repo[.git]) formats.
+    """
+    cleaned = re.sub(r"\.git$", "", url.rstrip("/"))
+    # SSH: anything@host:owner/repo
+    m = re.match(r"^[^@]+@[^:]+:(.+)$", cleaned)
+    if m:
+        path = m.group(1)
+    else:
+        # HTTPS or bare host/path — strip protocol then take last two segments
+        path = re.sub(r"^[a-z+]+://", "", cleaned)
+
+    parts = [p for p in path.split("/") if p]
+    if len(parts) >= 2:
+        return parts[-2], parts[-1]
+    return "unknown", parts[-1] if parts else "repo"
+
+
 def detect_template(workspace_path: Path) -> str:
     """Guess the package manager from lockfiles."""
     if (workspace_path / "pnpm-lock.yaml").exists():
@@ -82,7 +104,6 @@ def init(
     ensure_templates()
 
     e_dir = env_dir(name)
-    workspace_dir = e_dir / "workspace"
 
     if e_dir.exists():
         console.print(f"[red]Error:[/red] Environment '{name}' already exists at {e_dir}")
@@ -90,13 +111,20 @@ def init(
 
     e_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Clone repository
-    console.print(f"Cloning {git_url} into {workspace_dir}...")
-    try:
-        subprocess.run(["git", "clone", git_url, str(workspace_dir)], check=True)
-    except subprocess.CalledProcessError:
-        console.print("[red]Error:[/red] Git clone failed.")
-        raise typer.Exit(1)
+    # 1. Determine workspace path under git root
+    owner, repo = _parse_git_url(git_url)
+    workspace_dir = git_root() / owner / repo
+    workspace_dir.parent.mkdir(parents=True, exist_ok=True)
+
+    if workspace_dir.exists():
+        console.print(f"[yellow]Note:[/yellow] Workspace already exists at {workspace_dir} — skipping clone.")
+    else:
+        console.print(f"Cloning {git_url} into {workspace_dir}...")
+        try:
+            subprocess.run(["git", "clone", git_url, str(workspace_dir)], check=True)
+        except subprocess.CalledProcessError:
+            console.print("[red]Error:[/red] Git clone failed.")
+            raise typer.Exit(1)
 
     # 2. Determine template
     selected_template = template or detect_template(workspace_dir)

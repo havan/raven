@@ -67,14 +67,63 @@ def destroy(
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt."),
 ) -> None:
     """Destroy an environment (stop + remove all resources)."""
+    from raven.config.schema import SourceMount
+    from raven.state.store import delete_state, state_exists
+    from raven.util.xdg import env_dir
+
+    e_dir = env_dir(name)
+    if not e_dir.exists() and not state_exists(name):
+        console.print(f"[red]Error:[/red] Environment '{name}' does not exist.")
+        raise typer.Exit(1)
+
     if not yes:
         confirm = typer.confirm(f"Destroy environment '{name}'? This cannot be undone")
         if not confirm:
             raise typer.Exit()
 
-    backend, _ = _get_backend_for_env(name)
-    backend.destroy(name)
+    # Try to read the workspace path now, before we delete anything
+    workspace: Path | None = None
+    config = None
+    try:
+        config = _load_env_config(name)
+        if isinstance(config.source, SourceMount):
+            workspace = Path(config.source.path)
+    except Exception as exc:
+        log.warning("Could not load config for '%s': %s", name, exc)
+        console.print(f"[yellow]Warning:[/yellow] Could not load config: {exc}")
+
+    # Get backend — try from config first, fall back to Podman (name is enough for cleanup)
+    backend = None
+    try:
+        if config is not None:
+            backend = get_backend(config)
+        else:
+            from raven.backends.podman.backend import PodmanBackend
+            backend = PodmanBackend()
+    except Exception as exc:
+        log.warning("Could not instantiate backend for '%s': %s", name, exc)
+        console.print(f"[yellow]Warning:[/yellow] Could not load backend: {exc}")
+
+    # Run backend cleanup; on failure warn and fall through to state cleanup
+    if backend is not None:
+        try:
+            backend.destroy(name)
+        except Exception as exc:
+            log.warning("Backend destroy failed for '%s': %s", name, exc)
+            console.print(f"[yellow]Warning:[/yellow] Backend cleanup failed: {exc}")
+            # Best-effort state removal so raven no longer tracks this env
+            try:
+                delete_state(name)
+            except Exception:
+                pass
+
     console.print(f"[red]Environment '{name}' destroyed.[/red]")
+
+    if workspace is not None and workspace.exists():
+        console.print(
+            f"[yellow]Note:[/yellow] Workspace was not removed — it lives outside raven's control:\n"
+            f"  {workspace}"
+        )
 
 
 def install(
