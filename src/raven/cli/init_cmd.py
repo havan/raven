@@ -15,7 +15,7 @@ from rich.panel import Panel
 
 from raven.backends import get_backend
 from raven.config.loader import save_config
-from raven.config.schema import EnvConfig
+from raven.config.schema import ENV_NAME_RE, EnvConfig
 from raven.util.console import console
 from raven.util.xdg import ensure_dirs, env_dir, git_root, templates_dir
 
@@ -112,6 +112,11 @@ def init(
     template: Optional[str] = typer.Option(None, "--template", "-t", help="Template name to use (e.g. npm, yarn)."),
 ) -> None:
     """Clone a repository, generate a config, and create the environment."""
+    if not ENV_NAME_RE.match(name):
+        console.print(f"[red]Error:[/red] Environment name '{name}' is invalid.")
+        console.print("Use only lowercase letters, digits, hyphens, and underscores. Must start with a letter or digit.")
+        raise typer.Exit(1)
+
     ensure_dirs()
     ensure_templates()
 
