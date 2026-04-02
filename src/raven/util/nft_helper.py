@@ -49,22 +49,44 @@ def main() -> None:
         print("Error: Missing or invalid PID", file=sys.stderr)
         sys.exit(1)
 
-    # 3. Security: Cross-reference PID with Raven state if possible
+    # 3. Security: Cross-reference PID with Raven state
     data_root = get_user_data_dir()
     state_file = data_root / "envs" / env_name / "state.json"
-    if state_file.exists():
-        # Check if we can find the PID in the state (best effort)
-        import json
-        try:
-            state_data = json.loads(state_file.read_text())
-            # Note: We don't strictly require the PID to match exactly if podman
-            # restarted the container and we haven't updated state yet, but
-            # we SHOULD verify it's a PID associated with this env in some way.
-            # For now, let's at least ensure the state file exists for this env.
-        except Exception:
-            pass
-    else:
+    if not state_file.exists():
         print(f"Error: Environment state not found for '{env_name}' at {state_file}",
+              file=sys.stderr)
+        sys.exit(1)
+
+    import json
+    try:
+        state_data = json.loads(state_file.read_text())
+    except Exception as e:
+        print(f"Error: Failed to parse state file for '{env_name}': {e}", file=sys.stderr)
+        sys.exit(1)
+
+    # Validate that this PID is indeed for this environment
+    container_id = state_data.get("container_id")
+    if not container_id:
+        print(f"Error: State for '{env_name}' is missing container_id", file=sys.stderr)
+        sys.exit(1)
+
+    # Verification: check /proc/<pid>/cgroup for the container_id
+    # Rootless Podman usually puts container ID in cgroup path
+    try:
+        cgroup_path = Path(f"/proc/{pid}/cgroup")
+        if not cgroup_path.exists():
+            print(f"Error: Process {pid} not found", file=sys.stderr)
+            sys.exit(1)
+
+        cgroup_content = cgroup_path.read_text()
+        if container_id not in cgroup_content:
+            # Fallback: check if the process is exactly 'sshd' and has our container_id
+            # in its environment or similar, but cgroup is the most reliable.
+            print(f"Error: Process {pid} does not belong to environment '{env_name}'",
+                  file=sys.stderr)
+            sys.exit(1)
+    except Exception as e:
+        print(f"Error: Failed to verify PID {pid} against environment '{env_name}': {e}",
               file=sys.stderr)
         sys.exit(1)
 
