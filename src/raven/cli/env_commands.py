@@ -128,6 +128,9 @@ def destroy(
 
 def install(
     name: str = typer.Argument(help="Environment name."),
+    allow_unrestricted: bool = typer.Option(
+        False, "--allow-unrestricted", help="Continue even if network isolation fails."
+    ),
 ) -> None:
     """Run setup commands with restricted network (install phase).
 
@@ -148,8 +151,14 @@ def install(
     try:
         backend.apply_network_phase(name, NetworkPhase.INSTALL)
     except Exception as e:
-        log.warning("Could not apply network rules: %s", e)
-        console.print(f"[yellow]Warning: Network isolation not applied: {e}[/yellow]")
+        if not allow_unrestricted:
+            log.error("Failed to apply network isolation: %s", e)
+            console.print(f"[red]Error: Network isolation could not be applied: {e}[/red]")
+            console.print("Use --allow-unrestricted to proceed without isolation.")
+            raise typer.Exit(1)
+        else:
+            log.warning("Could not apply network rules (unrestricted mode): %s", e)
+            console.print(f"[yellow]Warning: Network isolation not applied (unrestricted mode): {e}[/yellow]")
 
     failed = False
     for cmd in config.setup_commands:
@@ -178,6 +187,9 @@ def reinstall(
     cmd: Optional[list[str]] = typer.Option(None, "--cmd", help="Command(s) to run instead of config defaults."),
     purge: bool = typer.Option(False, "--purge", help="Remove dependency directories before reinstalling."),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompts."),
+    allow_unrestricted: bool = typer.Option(
+        False, "--allow-unrestricted", help="Continue even if network isolation fails."
+    ),
 ) -> None:
     """Reinstall dependencies with restricted network.
 
@@ -221,8 +233,14 @@ def reinstall(
     try:
         backend.apply_network_phase(name, NetworkPhase.INSTALL)
     except Exception as e:
-        log.warning("Could not apply network rules: %s", e)
-        console.print(f"[yellow]Warning: Network isolation not applied: {e}[/yellow]")
+        if not allow_unrestricted:
+            log.error("Failed to apply network isolation: %s", e)
+            console.print(f"[red]Error: Network isolation could not be applied: {e}[/red]")
+            console.print("Use --allow-unrestricted to proceed without isolation.")
+            raise typer.Exit(1)
+        else:
+            log.warning("Could not apply network rules (unrestricted mode): %s", e)
+            console.print(f"[yellow]Warning: Network isolation not applied (unrestricted mode): {e}[/yellow]")
 
     failed = False
     for c in commands:
