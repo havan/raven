@@ -29,7 +29,11 @@ def export(
 
     # Read raw YAML to preserve ${VAR} placeholders (load_config would expand them)
     try:
-        data = yaml.safe_load(config_path.read_text())
+        content = config_path.read_text()
+        data = yaml.safe_load(content)
+    except OSError as e:
+        console.print(f"[red]Error:[/red] Could not read config file for '{name}': {e}")
+        raise typer.Exit(1)
     except yaml.YAMLError as e:
         console.print(f"[red]Error:[/red] Failed to parse YAML config: {e}")
         raise typer.Exit(1)
@@ -46,7 +50,11 @@ def export(
     yaml_str = yaml.dump(data, default_flow_style=False, sort_keys=False)
 
     if output:
-        output.write_text(yaml_str)
-        console.print(f"[green]Config exported to {output}[/green]")
+        try:
+            output.write_text(yaml_str)
+            console.print(f"[green]Config exported to {output}[/green]")
+        except OSError as e:
+            console.print(f"[red]Error:[/red] Could not write to output file {output}: {e}")
+            raise typer.Exit(1)
     else:
         sys.stdout.write(yaml_str)
