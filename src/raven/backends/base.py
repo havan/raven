@@ -99,3 +99,7 @@ class Backend(ABC):
 
         Returns a dict with 'processes' (list of dicts) and 'resources' (dict).
         """
+
+    @abstractmethod
+    def get_started_at(self, name: str) -> str | None:
+        """Return the ISO8601 timestamp when the container last started, or None."""

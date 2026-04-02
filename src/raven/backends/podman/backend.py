@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import socket
-from datetime import datetime, timezone
 from typing import Any
 
 from raven.backends.base import Backend, EnvInfo
@@ -62,10 +61,6 @@ class PodmanBackend(Backend):
         ])
         log.info("Created podman network '%s'", network_name(config.name))
 
-        from raven.backends.podman.network import get_network_interface
-        network_iface = get_network_interface(config.name)
-        log.info("Network bridge interface: %s", network_iface)
-
         # Generate the systemd service unit
         generate_container_service(config, ssh_port)
 
@@ -77,9 +72,6 @@ class PodmanBackend(Backend):
         state = EnvState(
             name=config.name,
             container_id=cname,
-            status=EnvStatus.CREATED,
-            network_name=network_name(config.name),
-            network_interface=network_iface,
             ssh_port=ssh_port,
             backend="podman",
         )
@@ -90,13 +82,11 @@ class PodmanBackend(Backend):
         return cname
 
     def start(self, name: str) -> None:
+        if self.status(name) == EnvStatus.RUNNING:
+            log.warning("Environment '%s' is already running", name)
+            return
+
         state = load_state(name)
-        if state.status == EnvStatus.RUNNING:
-            # Verify it's actually running before trusting state
-            if self.status(name) == EnvStatus.RUNNING:
-                log.warning("Environment '%s' is already running", name)
-                return
-            log.warning("State says running but container is not — restarting")
 
         # Regenerate the service unit from config so any changes (ports, env,
         # resources) are always applied before the container starts.
@@ -122,9 +112,6 @@ class PodmanBackend(Backend):
         # Wait for container to be running
         self._wait_for_running(name)
 
-        state.status = EnvStatus.RUNNING
-        state.started_at = datetime.now(timezone.utc).isoformat()
-
         # Store the actual container ID (hex) so nft_helper can verify cgroup membership.
         id_result = run(
             ["podman", "inspect", "--format", "{{.Id}}", container_name(name)],
@@ -132,8 +119,7 @@ class PodmanBackend(Backend):
         )
         if id_result.returncode == 0 and id_result.stdout.strip():
             state.container_id = id_result.stdout.strip()
-
-        save_state(state)
+            save_state(state)
 
         # Apply the configured run-phase network policy now that the container is up.
         try:
@@ -173,11 +159,6 @@ class PodmanBackend(Backend):
 
         svc = _service_name(name)
         run(["systemctl", "--user", "stop", f"{svc}.service"], check=False)
-
-        state = load_state(name)
-        state.status = EnvStatus.STOPPED
-        state.started_at = None
-        save_state(state)
         log.info("Environment '%s' stopped", name)
 
     def destroy(self, name: str) -> None:
@@ -406,6 +387,20 @@ class PodmanBackend(Backend):
                     "memory": parts[1].strip(),
                 }
         return {"cpu": "-", "memory": "-"}
+
+    def get_started_at(self, name: str) -> str | None:
+        """Return ISO8601 start timestamp from podman inspect, or None if not running."""
+        result = run(
+            ["podman", "inspect", "--format", "{{.State.StartedAt}}", container_name(name)],
+            check=False,
+        )
+        if result.returncode != 0:
+            return None
+        ts = result.stdout.strip()
+        # Podman returns zero time when container hasn't started
+        if not ts or ts.startswith("0001-01-01"):
+            return None
+        return ts
 
     def _wait_for_running(self, name: str, timeout: int = 30) -> None:
         """Poll until the container is running."""

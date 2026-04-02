@@ -28,22 +28,21 @@ def _status_single(name: str) -> None:
         console.print(f"[red]Error:[/red] Environment '{name}' not found.")
         raise typer.Exit(1)
 
+    live_status = EnvStatus.UNKNOWN
+    config = None
+    backend = None
     try:
         config = load_config(env_dir(name) / "config.yaml")
         backend = get_backend(config)
         live_status = backend.status(name)
-        if live_status != state.status:
-            state.status = live_status
     except Exception as e:
-        log.debug("Could not refresh status for '%s': %s", name, e)
-        config = None
-        backend = None
+        log.debug("Could not get live status for '%s': %s", name, e)
 
-    style = STATUS_STYLES.get(state.status, "")
-    uptime = _format_uptime(state.started_at) if state.status == EnvStatus.RUNNING else "-"
+    style = STATUS_STYLES.get(live_status, "")
+    uptime = _format_uptime(backend.get_started_at(name)) if live_status == EnvStatus.RUNNING and backend else "-"
 
     cpu, mem = "-", "-"
-    if state.status == EnvStatus.RUNNING and backend:
+    if live_status == EnvStatus.RUNNING and backend:
         try:
             stats = backend.get_stats(name)
             cpu = stats.get("cpu", "-")
@@ -52,7 +51,7 @@ def _status_single(name: str) -> None:
             pass
 
     rows = [
-        ("Status", f"[{style}]{state.status.value}[/{style}]"),
+        ("Status", f"[{style}]{live_status.value}[/{style}]"),
         ("Backend", state.backend),
         ("Network Policy", state.network_phase.value),
         ("SSH Port", str(state.ssh_port) if state.ssh_port else "-"),
@@ -76,11 +75,10 @@ def _status_single(name: str) -> None:
 
 def status(
     name: Optional[str] = typer.Argument(None, help="Environment name. If omitted, shows all environments."),
-    refresh: bool = typer.Option(False, "--refresh", "-r", help="Refresh live status from backend."),
     stats: bool = typer.Option(False, "--stats", "-s", help="Show live CPU and memory usage (slower)."),
 ) -> None:
     """Show environment status. Detailed view for one env, table for all."""
     if name:
         _status_single(name)
     else:
-        list_envs(refresh=refresh, stats=stats)
+        list_envs(stats=stats)

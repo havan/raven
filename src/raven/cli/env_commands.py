@@ -54,7 +54,6 @@ def shell(
 ) -> None:
     """Open an interactive shell inside an environment."""
     backend, _ = _get_backend_for_env(name)
-    state = load_state(name)
     if backend.status(name) != EnvStatus.RUNNING:
         console.print(f"[yellow]Environment '{name}' is not running. Starting...[/yellow]")
         backend.start(name)
@@ -147,7 +146,6 @@ def install(
     Only approved package registries are reachable during this phase.
     """
     backend, config = _get_backend_for_env(name)
-    state = load_state(name)
 
     if backend.status(name) != EnvStatus.RUNNING:
         console.print(f"[yellow]Environment '{name}' is not running. Starting...[/yellow]")
@@ -300,7 +298,6 @@ def run_cmd(
 ) -> None:
     """Run a command inside an environment."""
     backend, _ = _get_backend_for_env(name)
-    state = load_state(name)
 
     if backend.status(name) != EnvStatus.RUNNING:
         console.print(f"[yellow]Environment '{name}' is not running. Starting...[/yellow]")

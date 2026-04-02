@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -23,18 +22,18 @@ class NetworkPhase(str, Enum):
 
 
 class EnvState(BaseModel):
-    """Mutable runtime state persisted to state.json."""
+    """Persistent configuration state for an environment.
+
+    Runtime state (running/stopped, uptime) is always queried live from the
+    backend and is never stored here.
+    """
 
     name: str
     container_id: str = ""
-    status: EnvStatus = EnvStatus.CREATED
     network_phase: NetworkPhase = NetworkPhase.RUN
-    network_name: str = ""
-    network_interface: str = ""  # actual bridge interface name assigned by Podman/netavark
     ssh_port: int = 0
     install_completed: bool = False
     backend: str = "podman"
     created_at: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
-    started_at: Optional[str] = None

@@ -10,7 +10,6 @@ from rich.table import Table
 from raven.backends import get_backend
 from raven.config.loader import load_config
 from raven.state.models import EnvStatus
-from raven.state.store import load_state
 from raven.util.console import console
 from raven.util.xdg import env_dir
 
@@ -21,7 +20,6 @@ def top(
     name: str = typer.Argument(help="Environment name."),
 ) -> None:
     """Show processes, ports, and resource usage for an environment."""
-    state = load_state(name)
     config = load_config(env_dir(name) / "config.yaml")
     backend = get_backend(config)
 

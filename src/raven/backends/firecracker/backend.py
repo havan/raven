@@ -53,3 +53,6 @@ class FirecrackerBackend(Backend):
 
     def get_processes(self, name: str) -> dict[str, Any]:
         raise NotImplementedError(_NOT_IMPLEMENTED)
+
+    def get_started_at(self, name: str) -> str | None:
+        raise NotImplementedError(_NOT_IMPLEMENTED)

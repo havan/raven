@@ -33,11 +33,15 @@ def _regenerate_unit(name: str, cfg: EnvConfig) -> None:
     state = load_state(name)
     generate_container_service(cfg, state.ssh_port)
     run(["systemctl", "--user", "daemon-reload"])
-    if state.status == EnvStatus.RUNNING:
-        console.print(
-            f"[yellow]Container is running — restart required to apply changes:[/yellow] "
-            f"[bold]raven restart {name}[/bold]"
-        )
+    try:
+        from raven.backends import get_backend
+        if get_backend(cfg).status(name) == EnvStatus.RUNNING:
+            console.print(
+                f"[yellow]Container is running — restart required to apply changes:[/yellow] "
+                f"[bold]raven restart {name}[/bold]"
+            )
+    except Exception:
+        pass
 
 
 def _load(name: str) -> tuple[EnvConfig, Path]:
