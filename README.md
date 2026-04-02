@@ -115,18 +115,22 @@ raven network status my-node-app         # inspect current policy and active CID
 |---|---|
 | `raven create <name>` | Create environment from `raven.yaml` (or `--config path`) |
 | `raven init <name> <git-url>` | Clone a repo, detect template, prompt for policy, create environment |
+| `raven setup` | Initial project/environment setup (sudoers, linger, etc.) |
 | `raven start <name>` | Start a stopped environment (applies run-phase policy immediately) |
 | `raven stop <name>` | Stop a running environment |
+| `raven restart <name>` | Restart an environment (stop then start) |
 | `raven shell <name>` | Open an interactive shell |
 | `raven install <name>` | Run `setup_commands` with restricted network |
 | `raven reinstall <name>` | Re-run installs on demand (see below) |
 | `raven run <name> <cmd...>` | Run a command inside the environment |
+| `raven logs [name]` | Stream or show logs for an environment |
 | `raven code <name>` | Open VS Code via Remote SSH |
 | `raven list` | List all environments (alias: `ls`) |
 | `raven status [name]` | Detailed info for one env, or list all if no name |
 | `raven top <name>` | Show processes and resource usage inside an environment |
 | `raven ps [name]` | Alias for `list` (no name) or `top` (with name) |
 | `raven export <name>` | Print the config YAML (use `--portable` for sharing) |
+| `raven config` | View or edit configuration interactively |
 | `raven destroy <name>` | Stop and remove the environment |
 | `raven network status <name>` | Show current network policy, allowed hosts, and active CIDRs |
 | `raven network policy <name> <policy>` | Switch run-phase policy live without restarting |
