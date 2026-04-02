@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+import typer
 from rich.table import Table
 
 from raven.backends import get_backend
@@ -25,15 +26,18 @@ STATUS_STYLES = {
 
 
 def _live_status(name: str) -> EnvStatus:
-    """Query podman for the actual container status."""
+    """Query backend for the actual container status."""
     try:
         config = load_config(env_dir(name) / "config.yaml")
         return get_backend(config).status(name)
-    except Exception:
+    except Exception as e:
+        log.debug("Live status check failed for '%s': %s", name, e)
         return EnvStatus.UNKNOWN
 
 
-def list_envs() -> None:
+def list_envs(
+    refresh: bool = typer.Option(False, "--refresh", "-r", help="Refresh live status from backend."),
+) -> None:
     """List all raven-managed environments."""
     names = list_env_names()
 
@@ -52,15 +56,16 @@ def list_envs() -> None:
     for name in names:
         try:
             state = load_state(name)
-            live = _live_status(name)
-            # Reconcile stale state with actual podman status
-            if live != EnvStatus.UNKNOWN and live != state.status:
-                log.debug(
-                    "Reconciling state for '%s': %s → %s",
-                    name, state.status.value, live.value,
-                )
-                state.status = live
-                save_state(state)
+            if refresh:
+                live = _live_status(name)
+                # Reconcile stale state with actual podman status
+                if live != EnvStatus.UNKNOWN and live != state.status:
+                    log.debug(
+                        "Reconciling state for '%s': %s → %s",
+                        name, state.status.value, live.value,
+                    )
+                    state.status = live
+                    save_state(state)
             style = STATUS_STYLES.get(state.status, "")
             table.add_row(
                 state.name,

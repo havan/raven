@@ -27,6 +27,17 @@ def generate_install_rules(env_name: str, cidrs: list[str]) -> Path:
 
     ip_elements = ", ".join(cidrs) if cidrs else "0.0.0.0/32"  # dummy if empty
 
+    # Only allow DNS if we have an allowlist (otherwise DNS is useless and a tunneling risk)
+    dns_rules = ""
+    if cidrs:
+        dns_rules = """\
+        # Allow DNS (needed for hostname resolution)
+        udp dport 53 accept
+        tcp dport 53 accept
+"""
+    else:
+        log.warning("Empty allowlist for '%s' — DNS access will be blocked.", env_name)
+
     rules = f"""\
 table inet {table_name} {{
 
@@ -44,11 +55,7 @@ table inet {table_name} {{
 
         # Allow traffic to allowed IPs
         ip daddr @allowed_ips accept
-
-        # Allow DNS (needed for hostname resolution)
-        udp dport 53 accept
-        tcp dport 53 accept
-
+{dns_rules}
         # Allow established/related return traffic
         ct state established,related accept
 

@@ -79,7 +79,7 @@ def _parse_git_url(url: str) -> tuple[str, str]:
     return "unknown", parts[-1] if parts else "repo"
 
 
-def detect_template(workspace_path: Path) -> str:
+def detect_template(workspace_path: Path) -> Optional[str]:
     """Guess the package manager from lockfiles."""
     if (workspace_path / "pnpm-lock.yaml").exists():
         return "pnpm"
@@ -91,7 +91,7 @@ def detect_template(workspace_path: Path) -> str:
         return "uv"
     if (workspace_path / "requirements.txt").exists() or (workspace_path / "pyproject.toml").exists():
         return "pip"
-    return "npm"  # Fallback
+    return None
 
 
 def init(
@@ -128,6 +128,20 @@ def init(
 
     # 2. Determine template
     selected_template = template or detect_template(workspace_dir)
+    if not selected_template:
+        console.print("\n[bold]No project template detected.[/bold]")
+        _tpl_choices = sorted(list(set(t.split(".")[0] for t in DEFAULT_TEMPLATES.keys())))
+        for i, t in enumerate(_tpl_choices, 1):
+            console.print(f"  {i}. [cyan]{t}[/cyan]")
+        _raw_tpl = typer.prompt("Choose template (number or name)", default="1")
+        try:
+            idx = int(_raw_tpl) - 1
+            if idx < 0 or idx >= len(_tpl_choices):
+                raise IndexError
+            selected_template = _tpl_choices[idx]
+        except (ValueError, IndexError):
+            selected_template = _raw_tpl if _raw_tpl in _tpl_choices else "npm"
+
     template_file = templates_dir() / f"{selected_template}.yaml"
 
     if not template_file.exists():

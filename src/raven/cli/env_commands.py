@@ -113,8 +113,8 @@ def destroy(
             # Best-effort state removal so raven no longer tracks this env
             try:
                 delete_state(name)
-            except Exception:
-                pass
+            except Exception as e:
+                log.debug("State cleanup also failed for '%s': %s", name, e)
 
     console.print(f"[red]Environment '{name}' destroyed.[/red]")
 

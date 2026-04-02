@@ -26,10 +26,26 @@ def load_state(name: str) -> EnvState:
 
 
 def save_state(state: EnvState) -> Path:
-    """Persist state to disk."""
+    """Persist state to disk atomically."""
+    import os
+    import tempfile
+
     path = _state_path(state.name)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(state.model_dump_json(indent=2) + "\n")
+
+    # Atomic write via temporary file
+    fd, tmp_path = tempfile.mkstemp(dir=str(path.parent), prefix="state.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(state.model_dump_json(indent=2) + "\n")
+            f.flush()
+            os.fsync(fd)
+        os.replace(tmp_path, path)
+    except Exception:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise
+
     log.debug("State saved: %s", path)
     return path
 

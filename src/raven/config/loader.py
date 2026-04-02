@@ -94,6 +94,10 @@ def _interpolate_env(value: str) -> str:
 
     def _replace(match: re.Match[str]) -> str:
         var = match.group(1)
-        return os.environ.get(var, "")
+        res = os.environ.get(var)
+        if res is None:
+            log.warning("Environment variable ${%s} not found, using empty string", var)
+            return ""
+        return res
 
     return re.sub(r"\$\{([^}]+)\}", _replace, value)

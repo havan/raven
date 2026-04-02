@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from enum import Enum
-from typing import Annotated, Literal, Union
+from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -85,7 +85,7 @@ class ResourceLimits(BaseModel):
 
 class VSCodeConfig(BaseModel):
     extensions: list[str] = Field(default_factory=list)
-    settings: dict[str, object] = Field(default_factory=dict)
+    settings: dict[str, Any] = Field(default_factory=dict)
 
 
 # ── Reinstall ───────────────────────────────────────────────────────────

@@ -136,7 +136,7 @@ class PodmanBackend(Backend):
         run(["systemctl", "--user", "stop", f"{svc}.service"], check=False)
 
         state.status = EnvStatus.STOPPED
-        state.started_at = ""
+        state.started_at = None
         save_state(state)
         log.info("Environment '%s' stopped", name)
 
@@ -368,3 +368,52 @@ class PodmanBackend(Backend):
         raise TimeoutError(
             f"Container '{cname}' did not reach running state within {timeout}s"
         )
+
+    def get_processes(self, name: str) -> dict[str, Any]:
+        """Get live process list and resource usage from Podman."""
+        from raven.backends.podman.systemd import container_name
+
+        cname = container_name(name)
+        res: dict[str, Any] = {"processes": [], "resources": {}}
+
+        # Resource usage
+        stats = run(
+            [
+                "podman",
+                "stats",
+                "--no-stream",
+                "--format",
+                "{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}\t{{.BlockIO}}",
+                cname,
+            ],
+            check=False,
+        )
+        if stats.returncode == 0 and stats.stdout.strip():
+            parts = stats.stdout.strip().split("\t")
+            if len(parts) >= 4:
+                res["resources"] = {
+                    "cpu": parts[0].strip(),
+                    "memory": parts[1].strip(),
+                    "net_io": parts[2].strip(),
+                    "block_io": parts[3].strip(),
+                }
+
+        # Processes inside the container
+        procs = run(
+            ["podman", "exec", cname, "ps", "aux", "--no-headers"],
+            check=False,
+        )
+        if procs.returncode == 0 and procs.stdout.strip():
+            for line in procs.stdout.strip().split("\n"):
+                cols = line.split(None, 10)
+                if len(cols) >= 11:
+                    res["processes"].append(
+                        {
+                            "user": cols[0],
+                            "pid": cols[1],
+                            "cpu": cols[2],
+                            "mem": cols[3],
+                            "command": cols[10],
+                        }
+                    )
+        return res

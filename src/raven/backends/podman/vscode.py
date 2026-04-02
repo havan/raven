@@ -64,10 +64,9 @@ def setup_vscode_ssh(name: str, config: VSCodeConfig) -> dict[str, str]:
     # Write SSH config on host
     _write_ssh_config(name, state.ssh_port, key_path)
 
-    # Install VS Code extensions inside container
-    for ext in config.extensions:
-        log.info("Installing VS Code extension: %s", ext)
-        # Extensions are installed by VS Code server once it connects
+    if config.extensions:
+        log.info("VS Code server will install %d extensions on connect: %s",
+                 len(config.extensions), ", ".join(config.extensions))
 
     return {
         "type": "ssh",
@@ -113,10 +112,12 @@ Host raven-{name}
             pattern = re.escape(begin) + r".*?" + re.escape(end)
             existing = re.sub(pattern, block.strip(), existing, flags=re.DOTALL)
             ssh_config_path.write_text(existing)
+            ssh_config_path.chmod(0o600)
         else:
             # Append
             with ssh_config_path.open("a") as f:
                 f.write("\n" + block)
+            ssh_config_path.chmod(0o600)
     else:
         ssh_config_path.write_text(block)
         ssh_config_path.chmod(0o600)

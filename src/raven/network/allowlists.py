@@ -36,7 +36,7 @@ def resolve_allowlist(hostnames: list[str]) -> list[str]:
                 cidr = f"{rdata.address}/32"
                 cidrs.add(cidr)
                 log.debug("Resolved %s -> %s", hostname, cidr)
-        except Exception as e:
+        except (dns.resolver.DNSException, ImportError) as e:
             log.warning("Could not resolve %s: %s", hostname, e)
 
     # Collapse overlapping/redundant prefixes (e.g. 104.16.0.0/12 subsumes 104.16.x.y/32)

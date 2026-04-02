@@ -12,7 +12,7 @@ applies. Your host stays untouched.
 
 ## How it works
 
-```
+```bash
 raven init myproject https://github.com/owner/repo  # clone + create + prompt for policy
 raven install myproject                              # npm ci / pip install with registry-only network
 raven shell myproject                                # interactive shell
@@ -80,7 +80,7 @@ raven init my-node-app https://github.com/owner/my-node-app
 `raven init` clones the repo, detects the package manager from lockfiles, and
 prompts you to choose a run-phase network policy:
 
-```
+```text
 Run phase network policy:
   1. open       — Full internet access
   2. restricted — Only allowed hosts (configure with raven allow)
