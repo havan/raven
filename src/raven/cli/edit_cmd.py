@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shlex
+import shutil
 import subprocess
 
 import typer
@@ -23,7 +24,13 @@ def edit(name: str = typer.Argument(..., help="Environment name.")) -> None:
         raise typer.Exit(1)
 
     editor = os.environ.get("EDITOR", "nano")
-    editor_cmd = shlex.split(editor)
+
+    try:
+        editor_cmd = shlex.split(editor)
+        if not editor_cmd or not shutil.which(editor_cmd[0]):
+            editor_cmd = ["nano"]
+    except ValueError:
+        editor_cmd = ["nano"]
 
     try:
         subprocess.run([*editor_cmd, str(config_path)], check=True)
