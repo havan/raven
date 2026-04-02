@@ -1,0 +1,50 @@
+name: my-python-app
+version: 1
+backend: podman
+image: python:3.12-slim-bookworm
+
+source:
+  type: mount
+  path: /path/to/your/project
+  mount_path: /workspace
+
+network:
+  install_phase:
+    allowed_registries:
+      - pypi.org
+      - files.pythonhosted.org
+      - bootstrap.pypa.io
+      - github.com
+      - objects.githubusercontent.com
+      - astral.sh
+    allow_dns: true
+  run_phase:
+    policy: open
+    allowed_hosts: []
+  port_forwards:
+    - host: 8000
+      container: 8000
+      protocol: tcp
+
+env_vars:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PYTHONUNBUFFERED: "1"
+
+resources:
+  cpus: 2.0
+  memory: 2g
+
+setup_commands:
+  - cd /workspace && pip install -r requirements.txt
+
+reinstall:
+  purge_dirs:
+    - .venv
+    - venv
+  commands:
+    - cd /workspace && pip install -r requirements.txt
+
+vscode:
+  extensions:
+    - ms-python.python
+    - ms-python.vscode-pylance

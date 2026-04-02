@@ -25,6 +25,7 @@ dev = [
 
 [project.scripts]
 raven = "raven.cli.app:main_entry"
+raven-nft-helper = "raven.util.nft_helper:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/raven"]
@@ -32,6 +33,10 @@ packages = ["src/raven"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v"
 
 [tool.mypy]
 strict = true
