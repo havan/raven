@@ -28,7 +28,15 @@ def export(
         raise typer.Exit(1)
 
     # Read raw YAML to preserve ${VAR} placeholders (load_config would expand them)
-    data = yaml.safe_load(config_path.read_text())
+    try:
+        data = yaml.safe_load(config_path.read_text())
+    except yaml.YAMLError as e:
+        console.print(f"[red]Error:[/red] Failed to parse YAML config: {e}")
+        raise typer.Exit(1)
+
+    if not isinstance(data, dict):
+        console.print(f"[red]Error:[/red] Configuration at {config_path} is not a valid YAML dictionary.")
+        raise typer.Exit(1)
 
     if portable:
         # Replace absolute source paths with relative placeholder
