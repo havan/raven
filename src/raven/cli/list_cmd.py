@@ -1,12 +1,9 @@
 """raven list — list all environments."""
-
 from __future__ import annotations
-
 import logging
-
+from datetime import datetime, timezone
 import typer
 from rich.table import Table
-
 from raven.backends import get_backend
 from raven.config.loader import load_config
 from raven.state.models import EnvStatus
@@ -26,7 +23,6 @@ STATUS_STYLES = {
 
 
 def _live_status(name: str) -> EnvStatus:
-    """Query backend for the actual container status."""
     try:
         config = load_config(env_dir(name) / "config.yaml")
         return get_backend(config).status(name)
@@ -35,12 +31,41 @@ def _live_status(name: str) -> EnvStatus:
         return EnvStatus.UNKNOWN
 
 
+def _format_uptime(started_at_str: str | None) -> str:
+    if not started_at_str:
+        return "-"
+    try:
+        started_at = datetime.fromisoformat(started_at_str)
+        if started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=timezone.utc)
+
+        delta = datetime.now(timezone.utc) - started_at
+        if delta.total_seconds() < 0:
+            return "?"  # Clock skew
+
+        days = delta.days
+        hours, remainder = divmod(delta.seconds, 3600)
+        minutes, _ = divmod(remainder, 60)
+
+        if days > 0:
+            return f"{days}d {hours}h"
+        if hours > 0:
+            return f"{hours}h {minutes}m"
+        if minutes > 0:
+            return f"{minutes}m"
+        return f"{delta.seconds}s"
+    except (ValueError, TypeError):
+        log.warning("Could not parse started_at timestamp: %s", started_at_str)
+        return "?"
+
+
 def list_envs(
-    refresh: bool = typer.Option(False, "--refresh", "-r", help="Refresh live status from backend."),
+    refresh: bool = typer.Option(
+        False, "--refresh", "-r", help="Refresh live status from backend."
+    ),
 ) -> None:
     """List all raven-managed environments."""
     names = list_env_names()
-
     if not names:
         console.print("[dim]No environments found.[/dim]")
         return
@@ -48,6 +73,7 @@ def list_envs(
     table = Table(title="Raven Environments")
     table.add_column("Name", style="bold")
     table.add_column("Status")
+    table.add_column("Uptime")
     table.add_column("Backend", style="dim")
     table.add_column("SSH Port", style="dim")
     table.add_column("Network Phase", style="dim")
@@ -58,25 +84,29 @@ def list_envs(
             state = load_state(name)
             if refresh:
                 live = _live_status(name)
-                # Reconcile stale state with actual podman status
                 if live != state.status:
-                    log.debug(
-                        "Reconciling state for '%s': %s → %s",
-                        name, state.status.value, live.value,
-                    )
                     state.status = live
                     if live != EnvStatus.UNKNOWN:
                         save_state(state)
+
             style = STATUS_STYLES.get(state.status, "")
+            uptime = (
+                _format_uptime(state.started_at)
+                if state.status == EnvStatus.RUNNING
+                else "-"
+            )
+
             table.add_row(
                 state.name,
                 f"[{style}]{state.status.value}[/{style}]",
+                uptime,
                 state.backend,
                 str(state.ssh_port) if state.ssh_port else "-",
                 state.network_phase.value,
                 state.created_at[:19] if state.created_at else "-",
             )
         except Exception as e:
-            table.add_row(name, f"[red]error: {e}[/red]", "", "", "", "")
+            table.add_row(name, f"[red]error: {e}[/red]", "", "", "", "", "")
 
     console.print(table)
+

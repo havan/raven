@@ -1,9 +1,10 @@
 """Network phase switching between install and run modes."""
 
 from __future__ import annotations
-
 import logging
-
+from rich.table import Table
+from raven.config.defaults import KNOWN_CDN_CIDRS
+from raven.util.console import console
 from raven.config.schema import NetworkConfig
 from raven.network.allowlists import resolve_allowlist, save_resolved_ips
 from raven.network.nftables import (
@@ -44,14 +45,38 @@ def switch_phase(
 def switch_to_install(env_name: str, network_config: NetworkConfig, pid: int) -> None:
     """Apply install-phase network rules (allowlist only)."""
     log.info("Switching '%s' to install phase (restricted network)", env_name)
+    registries = sorted(list(set(network_config.install_phase.allowed_hosts)))
 
-    registries = network_config.install_phase.allowed_hosts
-    cidrs = resolve_allowlist(registries)
-    save_resolved_ips(env_name, cidrs)
+    console.print("[bold]Resolving install-phase network allowlist...[/bold]")
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("Registry", style="cyan", no_wrap=True)
+    table.add_column("Source", style="yellow")
+    table.add_column("Resolved CIDRs")
 
-    rule_file = generate_install_rules(env_name, cidrs)
+    for hostname in registries:
+        if hostname in KNOWN_CDN_CIDRS:
+            cidrs = KNOWN_CDN_CIDRS[hostname]
+            table.add_row(hostname, "CDN", ", ".join(cidrs))
+        else:
+            # Resolve per-host for display purposes
+            resolved_cidrs = resolve_allowlist([hostname])
+            if resolved_cidrs:
+                table.add_row(hostname, "DNS", ", ".join(resolved_cidrs))
+            else:
+                table.add_row(hostname, "DNS", "[dim]Resolution failed or no IPs found.[/dim]")
+
+    console.print(table)
+
+    # Resolve all registries together for the final, collapsed rule set
+    final_cidrs = resolve_allowlist(registries)
+    save_resolved_ips(env_name, final_cidrs)
+
+    console.print(f"Total unique CIDRs to allow: [bold green]{len(final_cidrs)}[/bold green]")
+
+    rule_file = generate_install_rules(env_name, final_cidrs)
     apply_rules(rule_file, env_name, pid)
-    log.info("Install phase active: %d CIDRs allowed", len(cidrs))
+    log.info("Install phase active: %d CIDRs allowed", len(final_cidrs))
+
 
 
 def switch_to_run(env_name: str, network_config: NetworkConfig, pid: int) -> None:

@@ -146,7 +146,7 @@ def init(
 
             if normalize(current_remote) != normalize(git_url):
                 console.print(f"[red]Error:[/red] Workspace already exists at {workspace_dir} but points to a different remote: {current_remote}")
-                console.print(f"Please use a different environment name or remove the existing directory.")
+                console.print("Please use a different environment name or remove the existing directory.")
                 raise typer.Exit(1)
 
             console.print(f"[yellow]Note:[/yellow] Workspace already exists at {workspace_dir} and matches remote — skipping clone.")

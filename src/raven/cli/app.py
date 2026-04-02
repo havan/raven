@@ -42,13 +42,18 @@ from raven.cli.env_commands import destroy, install, reinstall, run_cmd, shell, 
 from raven.cli.list_cmd import list_envs  # noqa: E402
 from raven.cli.code import code  # noqa: E402
 from raven.cli.ps import ps  # noqa: E402
-from raven.cli.export_cmd import export  # noqa: E402
-from raven.cli.init_cmd import init  # noqa: E402
-from raven.cli.edit_cmd import edit  # noqa: E402
-from raven.cli.network_cmd import allow, network_app  # noqa: E402
+from raven.cli.export_cmd import export
+from raven.cli.init_cmd import init
+from raven.cli.edit_cmd import edit
+from raven.cli.logs_cmd import logs
+from raven.cli.setup_cmd import setup
+from raven.cli.status_cmd import status
+from raven.cli.network_cmd import allow, network_app
+from raven.cli.config_cmd import config_app
 
 app.command(name="create")(create)
 app.command(name="init")(init)
+app.command(name="setup")(setup)
 app.command(name="edit")(edit)
 app.command(name="start")(start)
 app.command(name="stop")(stop)
@@ -58,10 +63,13 @@ app.command(name="install")(install)
 app.command(name="reinstall")(reinstall)
 app.command(name="run")(run_cmd)
 app.command(name="list")(list_envs)
+app.command(name="status")(status)
+app.command(name="logs")(logs)
 app.command(name="code")(code)
 app.command(name="ps")(ps)
 app.command(name="export")(export)
 app.add_typer(network_app, name="network")
+app.add_typer(config_app, name="config")
 app.command(name="allow")(allow)
 
 
