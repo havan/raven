@@ -9,6 +9,7 @@ import typer
 
 from raven import __version__
 from raven.util.log import setup_logging
+from raven.util.xdg import logs_dir
 
 app = typer.Typer(
     name="raven",
@@ -28,11 +29,11 @@ def _version_callback(value: bool) -> None:
 def main(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show INFO-level messages."),
     debug: bool = typer.Option(False, "--debug", help="Show DEBUG-level messages (implies --verbose)."),
-    log_file: Optional[Path] = typer.Option(None, "--log-file", help="Write structured log to this file."),
+    log_file: Optional[Path] = typer.Option(None, "--log-file", help="Write structured log to this file (default: ~/.local/share/raven/logs/raven.log)."),
     version: bool = typer.Option(False, "--version", "-V", callback=_version_callback, is_eager=True, help="Show version and exit."),
 ) -> None:
     """Raven — Isolated dev environments with SCA protection."""
-    setup_logging(verbose=verbose, debug=debug, log_file=log_file)
+    setup_logging(verbose=verbose, debug=debug, log_file=log_file or logs_dir() / "raven.log")
 
 
 # Import and register sub-commands

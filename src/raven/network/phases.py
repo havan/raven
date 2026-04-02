@@ -21,6 +21,7 @@ def switch_phase(
     env_name: str,
     phase: NetworkPhase,
     network_config: NetworkConfig,
+    iface: str,
 ) -> None:
     """Switch the network rules for an environment between install and run phases.
 
@@ -28,16 +29,17 @@ def switch_phase(
         env_name: Environment name.
         phase: Target phase.
         network_config: Network configuration from the environment config.
+        iface: Actual bridge interface name assigned by Podman/netavark.
     """
     if phase == NetworkPhase.INSTALL:
-        switch_to_install(env_name, network_config)
+        switch_to_install(env_name, network_config, iface)
     elif phase == NetworkPhase.RUN:
-        switch_to_run(env_name, network_config)
+        switch_to_run(env_name, network_config, iface)
     else:
         raise ValueError(f"Unknown network phase: {phase}")
 
 
-def switch_to_install(env_name: str, network_config: NetworkConfig) -> None:
+def switch_to_install(env_name: str, network_config: NetworkConfig, iface: str) -> None:
     """Apply install-phase network rules (allowlist only)."""
     log.info("Switching '%s' to install phase (restricted network)", env_name)
 
@@ -45,15 +47,12 @@ def switch_to_install(env_name: str, network_config: NetworkConfig) -> None:
     cidrs = resolve_allowlist(registries)
     save_resolved_ips(env_name, cidrs)
 
-    # Delete any existing table first to avoid conflicts
-    delete_table(env_name)
-
-    rule_file = generate_install_rules(env_name, cidrs)
-    apply_rules(rule_file)
+    rule_file = generate_install_rules(env_name, cidrs, iface)
+    apply_rules(rule_file, env_name)
     log.info("Install phase active: %d CIDRs allowed", len(cidrs))
 
 
-def switch_to_run(env_name: str, network_config: NetworkConfig) -> None:
+def switch_to_run(env_name: str, network_config: NetworkConfig, iface: str) -> None:
     """Apply run-phase network rules based on policy."""
     policy = network_config.run_phase.policy
     log.info("Switching '%s' to run phase (policy: %s)", env_name, policy)
@@ -66,15 +65,13 @@ def switch_to_run(env_name: str, network_config: NetworkConfig) -> None:
     elif policy == "allowlist":
         hosts = network_config.run_phase.allowed_hosts
         cidrs = resolve_allowlist(hosts)
-        delete_table(env_name)
-        rule_file = generate_install_rules(env_name, cidrs)
-        apply_rules(rule_file)
+        rule_file = generate_install_rules(env_name, cidrs, iface)
+        apply_rules(rule_file, env_name)
         log.info("Run phase active: %d CIDRs allowed", len(cidrs))
 
     elif policy == "block":
-        delete_table(env_name)
-        rule_file = generate_block_rules(env_name)
-        apply_rules(rule_file)
+        rule_file = generate_block_rules(env_name, iface)
+        apply_rules(rule_file, env_name)
         log.info("Run phase active: network blocked")
 
     else:

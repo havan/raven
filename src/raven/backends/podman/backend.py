@@ -61,6 +61,10 @@ class PodmanBackend(Backend):
         ])
         log.info("Created podman network '%s'", network_name(config.name))
 
+        from raven.backends.podman.network import get_network_interface
+        network_iface = get_network_interface(config.name)
+        log.info("Network bridge interface: %s", network_iface)
+
         # Generate the systemd service unit
         generate_container_service(config, ssh_port)
 
@@ -74,6 +78,7 @@ class PodmanBackend(Backend):
             container_id=cname,
             status=EnvStatus.CREATED,
             network_name=network_name(config.name),
+            network_interface=network_iface,
             ssh_port=ssh_port,
             backend="podman",
         )
@@ -285,17 +290,22 @@ class PodmanBackend(Backend):
         )
 
     def apply_network_phase(self, name: str, phase: NetworkPhase) -> None:
-        # Delegate to the network module (implemented in Phase 2)
-        from raven.network.phases import switch_phase
-
-        state = load_state(name)
         from raven.config.loader import load_config
+        from raven.network.phases import switch_phase
         from raven.util.xdg import env_dir
 
+        state = load_state(name)
         config_path = env_dir(name) / "config.yaml"
         config = load_config(config_path)
 
-        switch_phase(name, phase, config.network)
+        iface = state.network_interface
+        if not iface:
+            # Fallback for envs created before this field was added
+            from raven.backends.podman.network import get_network_interface
+            iface = get_network_interface(name)
+            state.network_interface = iface
+
+        switch_phase(name, phase, config.network, iface)
         state.network_phase = phase
         save_state(state)
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from ipaddress import IPv4Network
+from ipaddress import IPv4Network, collapse_addresses, ip_network
 
 from raven.config.defaults import KNOWN_CDN_CIDRS
 
@@ -39,7 +39,14 @@ def resolve_allowlist(hostnames: list[str]) -> list[str]:
         except Exception as e:
             log.warning("Could not resolve %s: %s", hostname, e)
 
-    return sorted(cidrs)
+    # Collapse overlapping/redundant prefixes (e.g. 104.16.0.0/12 subsumes 104.16.x.y/32)
+    try:
+        networks = [ip_network(c, strict=False) for c in cidrs]
+        collapsed = collapse_addresses(networks)
+        return [str(n) for n in collapsed]
+    except Exception as e:
+        log.warning("CIDR collapse failed, using raw list: %s", e)
+        return sorted(cidrs)
 
 
 def save_resolved_ips(env_name: str, cidrs: list[str]) -> None:

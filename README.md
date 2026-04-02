@@ -77,7 +77,7 @@ systemd user services.
 name: my-node-app
 version: 1
 backend: podman
-image: node:22-bookworm-slim
+image: mcr.microsoft.com/devcontainers/base:ubuntu
 
 source:
   type: mount
@@ -170,7 +170,7 @@ raven reinstall my-node-app --purge --yes      # skip confirmation prompt
 name: my-project           # [a-z0-9][a-z0-9_-]* — must be unique
 version: 1
 backend: podman            # "podman" (default) | "firecracker" (coming soon)
-image: ubuntu:24.04        # any OCI image
+image: mcr.microsoft.com/devcontainers/base:ubuntu  # any OCI image
 
 source:
   type: mount              # "mount" — bind-mount a local directory

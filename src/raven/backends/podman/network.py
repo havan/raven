@@ -31,6 +31,21 @@ def ensure_network(env_name: str) -> str:
     return name
 
 
+def get_network_interface(env_name: str) -> str:
+    """Return the bridge interface name Podman/netavark assigned to the network."""
+    name = network_name(env_name)
+    result = run(
+        ["podman", "network", "inspect", "--format", "{{.NetworkInterface}}", name],
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"Cannot inspect network '{name}': {result.stderr.strip()}")
+    iface = result.stdout.strip()
+    if not iface:
+        raise RuntimeError(f"No interface name returned for network '{name}'")
+    return iface
+
+
 def remove_network(env_name: str) -> None:
     """Remove the Podman network for an environment."""
     name = network_name(env_name)

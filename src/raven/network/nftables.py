@@ -11,18 +11,18 @@ from raven.util.xdg import nft_rules_dir
 log = logging.getLogger(__name__)
 
 
-def generate_install_rules(env_name: str, cidrs: list[str]) -> Path:
+def generate_install_rules(env_name: str, cidrs: list[str], iface: str) -> Path:
     """Generate nftables rule file for install phase (allowlist only).
 
     Args:
         env_name: Environment name.
         cidrs: List of allowed CIDR strings.
+        iface: Actual bridge interface name assigned by Podman/netavark.
 
     Returns:
         Path to the generated .nft file.
     """
     table_name = f"raven-{env_name}"
-    iface = f"raven-{env_name}"  # Podman bridge interface name
 
     ip_elements = ", ".join(cidrs) if cidrs else "0.0.0.0/32"  # dummy if empty
 
@@ -62,10 +62,9 @@ table inet {table_name} {{
     return path
 
 
-def generate_block_rules(env_name: str) -> Path:
+def generate_block_rules(env_name: str, iface: str) -> Path:
     """Generate nftables rules that block all outbound traffic."""
     table_name = f"raven-{env_name}"
-    iface = f"raven-{env_name}"
 
     rules = f"""\
 table inet {table_name} {{
@@ -85,8 +84,14 @@ table inet {table_name} {{
     return path
 
 
-def apply_rules(rule_file: Path) -> None:
-    """Apply nftables rules from a file using sudo."""
+def apply_rules(rule_file: Path, env_name: str) -> None:
+    """Apply nftables rules from a file using sudo.
+
+    Deletes the table first so the load is always against a clean slate.
+    """
+    # Best-effort delete so that a stale table from a previous failed run
+    # doesn't cause "File exists" when the new rules are loaded.
+    delete_table(env_name)
     log.info("Applying nftables rules: %s", rule_file)
     run_as_root(["nft", "-f", str(rule_file)])
 

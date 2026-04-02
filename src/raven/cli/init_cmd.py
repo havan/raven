@@ -23,15 +23,15 @@ log = logging.getLogger(__name__)
 
 DEFAULT_TEMPLATES = {
     "npm.yaml": {
-        "image": "node:22-bookworm-slim",
+        "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
         "setup_commands": ["cd /workspace && npm ci"],
     },
     "yarn.yaml": {
-        "image": "node:22-bookworm-slim",
+        "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
         "setup_commands": ["cd /workspace && yarn install"],
     },
     "pnpm.yaml": {
-        "image": "node:22-bookworm-slim",
+        "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
         "setup_commands": ["cd /workspace && corepack enable pnpm && pnpm install"],
     },
     "uv.yaml": {

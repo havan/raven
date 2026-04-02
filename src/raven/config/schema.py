@@ -89,7 +89,7 @@ class EnvConfig(BaseModel):
     name: str
     version: int = 1
     backend: BackendType = BackendType.PODMAN
-    image: str = "ubuntu:24.04"
+    image: str = "mcr.microsoft.com/devcontainers/base:ubuntu"
     source: Source
     network: NetworkConfig = Field(default_factory=NetworkConfig)
     env_vars: dict[str, str] = Field(default_factory=dict)

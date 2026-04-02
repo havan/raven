@@ -29,6 +29,7 @@ class EnvState(BaseModel):
     status: EnvStatus = EnvStatus.CREATED
     network_phase: NetworkPhase = NetworkPhase.RUN
     network_name: str = ""
+    network_interface: str = ""  # actual bridge interface name assigned by Podman/netavark
     ssh_port: int = 0
     install_completed: bool = False
     backend: str = "podman"

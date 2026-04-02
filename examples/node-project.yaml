@@ -1,7 +1,7 @@
 name: my-node-app
 version: 1
 backend: podman
-image: node:22-bookworm-slim
+image: mcr.microsoft.com/devcontainers/base:ubuntu
 
 source:
   type: mount
