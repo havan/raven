@@ -34,5 +34,4 @@ def code(
 
     console.print(f"[dim]SSH host: {details['host']} (port {details['port']})[/dim]")
 
-    from raven.backends.podman.vscode import launch_vscode
-    launch_vscode(name, workspace)
+    backend.launch_vscode(name, workspace)

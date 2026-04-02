@@ -45,7 +45,7 @@ def delete_state(name: str) -> None:
     if path.exists():
         path.unlink()
         log.debug("Deleted state: %s", path)
-    # Also remove config.yaml and the directory if now empty (skip sub-directories)
+    # Remove all files and symlinks in the env directory, then rmdir if empty
     d = env_dir(name)
     if d.exists():
         for child in d.iterdir():

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 
-import typer
 from rich.table import Table
 
 from raven.backends import get_backend

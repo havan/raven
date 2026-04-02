@@ -10,7 +10,6 @@ from typing import Optional
 import typer
 import yaml
 
-from raven.config.loader import load_config
 from raven.util.console import console
 from raven.util.xdg import env_dir
 
@@ -24,13 +23,16 @@ def export(
 ) -> None:
     """Export an environment's YAML config for reproduction on another machine."""
     config_path = env_dir(name) / "config.yaml"
-    config = load_config(config_path)
+    if not config_path.exists():
+        console.print(f"[red]Error:[/red] No config found for environment '{name}'.")
+        raise typer.Exit(1)
 
-    data = config.model_dump(mode="json")
+    # Read raw YAML to preserve ${VAR} placeholders (load_config would expand them)
+    data = yaml.safe_load(config_path.read_text())
 
     if portable:
         # Replace absolute source paths with relative placeholder
-        if "source" in data and data["source"].get("type") == "mount":
+        if isinstance(data.get("source"), dict) and data["source"].get("type") == "mount":
             data["source"]["path"] = "./project"
 
     yaml_str = yaml.dump(data, default_flow_style=False, sort_keys=False)

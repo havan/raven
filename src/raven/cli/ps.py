@@ -8,10 +8,13 @@ import typer
 from rich.table import Table
 
 from raven.backends.podman.systemd import container_name
+from raven.config.loader import load_config
+from raven.config.schema import BackendType
 from raven.state.models import EnvStatus
 from raven.state.store import load_state
 from raven.util.console import console
 from raven.util.subprocess import run
+from raven.util.xdg import env_dir
 
 log = logging.getLogger(__name__)
 
@@ -20,6 +23,11 @@ def ps(
     name: str = typer.Argument(help="Environment name."),
 ) -> None:
     """Show processes, ports, and resource usage for an environment."""
+    config = load_config(env_dir(name) / "config.yaml")
+    if config.backend != BackendType.PODMAN:
+        console.print("[red]Error:[/red] 'raven ps' only supports Podman environments.")
+        raise typer.Exit(1)
+
     state = load_state(name)
 
     if state.status != EnvStatus.RUNNING:
@@ -51,7 +59,7 @@ def ps(
         check=False,
     )
     if ports_result.returncode == 0 and ports_result.stdout.strip():
-        console.print(f"\n[bold]Ports:[/bold]")
+        console.print("\n[bold]Ports:[/bold]")
         console.print(ports_result.stdout.strip())
 
     # Processes inside the container

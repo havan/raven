@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
 
 import typer
@@ -22,9 +23,10 @@ def edit(name: str = typer.Argument(..., help="Environment name.")) -> None:
         raise typer.Exit(1)
 
     editor = os.environ.get("EDITOR", "nano")
+    editor_cmd = shlex.split(editor)
 
     try:
-        subprocess.run([editor, str(config_path)])
+        subprocess.run([*editor_cmd, str(config_path)])
     except FileNotFoundError:
         console.print(f"[red]Error:[/red] Could not find editor '{editor}'. Please set $EDITOR.")
         raise typer.Exit(1)

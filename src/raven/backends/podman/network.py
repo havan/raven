@@ -16,18 +16,17 @@ def ensure_network(env_name: str) -> str:
     Returns the network name.
     """
     name = network_name(env_name)
-    result = run(["podman", "network", "exists", name], check=False)
-    if result.returncode == 0:
-        log.debug("Network %s already exists", name)
-        return name
-
-    run([
+    result = run([
         "podman", "network", "create",
+        "--ignore",
         "--label", f"raven.env={env_name}",
         "--label", "raven.managed=true",
         name,
-    ])
-    log.info("Created network: %s", name)
+    ], check=False)
+    if result.returncode == 0:
+        log.info("Created network: %s", name)
+    else:
+        log.debug("Network %s already exists", name)
     return name
 
 
@@ -49,5 +48,8 @@ def get_network_interface(env_name: str) -> str:
 def remove_network(env_name: str) -> None:
     """Remove the Podman network for an environment."""
     name = network_name(env_name)
-    run(["podman", "network", "rm", "-f", name], check=False)
-    log.info("Removed network: %s", name)
+    result = run(["podman", "network", "rm", "-f", name], check=False)
+    if result.returncode == 0:
+        log.info("Removed network: %s", name)
+    else:
+        log.warning("Failed to remove network %s: %s", name, result.stderr.strip())

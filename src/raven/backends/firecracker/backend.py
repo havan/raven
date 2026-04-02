@@ -42,3 +42,6 @@ class FirecrackerBackend(Backend):
 
     def setup_vscode(self, name: str, config: VSCodeConfig) -> dict[str, str]:
         raise NotImplementedError(_NOT_IMPLEMENTED)
+
+    def launch_vscode(self, name: str, workspace: str) -> None:
+        raise NotImplementedError(_NOT_IMPLEMENTED)

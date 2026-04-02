@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from ipaddress import IPv4Network, collapse_addresses, ip_network
+from ipaddress import collapse_addresses, ip_network
 
 from raven.config.defaults import KNOWN_CDN_CIDRS
 

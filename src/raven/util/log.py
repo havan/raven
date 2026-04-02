@@ -26,7 +26,7 @@ class JSONLinesFormatter(logging.Formatter):
                 entry[key] = getattr(record, key)
         if record.exc_info and record.exc_info[1]:
             entry["exception"] = str(record.exc_info[1])
-        return json.dumps(entry)
+        return json.dumps(entry, default=str)
 
 
 def setup_logging(
@@ -71,3 +71,10 @@ def setup_logging(
         datefmt="[%X]",
         force=True,
     )
+
+    if log_file:
+        # basicConfig sets the root logger to `level`, which gates the file handler
+        # even though it requests DEBUG. Raise the root logger and let each handler
+        # filter independently.
+        logging.getLogger().setLevel(logging.DEBUG)
+        handlers[0].setLevel(level)  # RichHandler keeps the user-facing level

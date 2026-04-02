@@ -153,7 +153,10 @@ def init(
 
     _raw_policy = typer.prompt("Choose policy (number or name)", default="1")
     try:
-        _chosen_policy = _policy_choices[int(_raw_policy) - 1]
+        idx = int(_raw_policy) - 1
+        if idx < 0 or idx >= len(_policy_choices):
+            raise IndexError
+        _chosen_policy = _policy_choices[idx]
     except (ValueError, IndexError):
         _chosen_policy = _raw_policy if _raw_policy in _policy_choices else "open"
 

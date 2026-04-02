@@ -14,7 +14,7 @@ from raven.backends.podman.systemd import (
     network_name,
     remove_service_files,
 )
-from raven.config.schema import EnvConfig, SourceClone, VSCodeConfig
+from raven.config.schema import EnvConfig, VSCodeConfig
 from raven.state.models import EnvState, EnvStatus, NetworkPhase
 from raven.state.store import delete_state, load_state, save_state, state_exists
 from raven.util.subprocess import exec_replace, run, stream_exec
@@ -147,7 +147,6 @@ class PodmanBackend(Backend):
         except FileNotFoundError:
             pass
 
-        svc = _service_name(name)
         # Remove service unit files (and legacy Quadlet files if present)
         remove_service_files(name)
         run(["systemctl", "--user", "daemon-reload"])
@@ -326,6 +325,10 @@ class PodmanBackend(Backend):
         # Implemented in Phase 3
         from raven.backends.podman.vscode import setup_vscode_ssh
         return setup_vscode_ssh(name, config)
+
+    def launch_vscode(self, name: str, workspace: str) -> None:
+        from raven.backends.podman.vscode import launch_vscode
+        launch_vscode(name, workspace)
 
     def _wait_for_running(self, name: str, timeout: int = 30) -> None:
         """Poll until the container is running."""

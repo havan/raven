@@ -65,6 +65,8 @@ nftables rules are applied inside the container's network namespace using `nsent
 <user> ALL=(root) NOPASSWD: /usr/bin/nsenter --net=/proc/*/ns/net /usr/sbin/nft -f /home/<user>/.local/share/raven/nft-rules/*.nft
 <user> ALL=(root) NOPASSWD: /usr/bin/nsenter --net=/proc/*/ns/net /usr/sbin/nft delete table inet raven-*
 ```
+> **Security note:** The `/proc/*/ns/net` wildcard permits targeting any process's network namespace, including the host's. For production use, replace with a root-owned wrapper script that validates the target PID belongs to a raven-managed container before invoking `nft`.
+
 Rules use the OUTPUT chain (not FORWARD) because rootless Podman with netavark+pasta bypasses the host FORWARD chain entirely. If `sudo nsenter` fails, `apply_network_phase()` logs a warning and continues (degraded mode — no isolation, but the install still runs).
 
 ### VS Code remote dev

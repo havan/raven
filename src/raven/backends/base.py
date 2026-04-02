@@ -83,3 +83,7 @@ class Backend(ABC):
     @abstractmethod
     def setup_vscode(self, name: str, config: VSCodeConfig) -> dict[str, str]:
         """Prepare VS Code remote access. Returns connection details."""
+
+    @abstractmethod
+    def launch_vscode(self, name: str, workspace: str) -> None:
+        """Launch VS Code connected to the environment."""

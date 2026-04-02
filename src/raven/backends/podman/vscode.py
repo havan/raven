@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import base64
 import logging
-import os
 from pathlib import Path
 
 from raven.config.schema import VSCodeConfig
@@ -41,12 +41,14 @@ def setup_vscode_ssh(name: str, config: VSCodeConfig) -> dict[str, str]:
     pub_key = key_path.with_suffix(".pub").read_text().strip()
     cname = f"raven-{name}"
 
-    # Inject public key into container
+    # Inject public key into container via base64 to avoid shell quoting issues
+    encoded = base64.b64encode(pub_key.encode()).decode()
     run([
         "podman", "exec", cname,
         "sh", "-c",
-        f"mkdir -p /root/.ssh && echo '{pub_key}' >> /root/.ssh/authorized_keys "
-        "&& chmod 700 /root/.ssh && chmod 600 /root/.ssh/authorized_keys",
+        f"mkdir -p /root/.ssh && "
+        f"echo {encoded} | base64 -d >> /root/.ssh/authorized_keys && "
+        f"chmod 700 /root/.ssh && chmod 600 /root/.ssh/authorized_keys",
     ])
 
     # Install and start SSH server inside container

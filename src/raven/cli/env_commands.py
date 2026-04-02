@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Optional
 
 import typer
-from rich.panel import Panel
 
 from raven.backends import get_backend
 from raven.config.loader import load_config

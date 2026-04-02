@@ -50,5 +50,9 @@ def create(
     ))
 
     if start_after:
-        backend.start(cfg.name)
-        console.print(f"[green]Environment '{cfg.name}' started.[/green]")
+        try:
+            backend.start(cfg.name)
+            console.print(f"[green]Environment '{cfg.name}' started.[/green]")
+        except RuntimeError as e:
+            console.print(f"[yellow]Environment created but failed to start:[/yellow] {e}")
+            raise typer.Exit(1)
