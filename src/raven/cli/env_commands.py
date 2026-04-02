@@ -91,14 +91,16 @@ def destroy(
         log.warning("Could not load config for '%s': %s", name, exc)
         console.print(f"[yellow]Warning:[/yellow] Could not load config: {exc}")
 
-    # Get backend — try from config first, fall back to Podman (name is enough for cleanup)
+    # Get backend — try from config first, then from state, fall back to Podman
     backend = None
     try:
         if config is not None:
             backend = get_backend(config)
+        elif state_exists(name):
+            state = load_state(name)
+            backend = get_backend(state.backend)
         else:
-            from raven.backends.podman.backend import PodmanBackend
-            backend = PodmanBackend()
+            backend = get_backend("podman")
     except Exception as exc:
         log.warning("Could not instantiate backend for '%s': %s", name, exc)
         console.print(f"[yellow]Warning:[/yellow] Could not load backend: {exc}")

@@ -11,13 +11,19 @@ if TYPE_CHECKING:
     from raven.config.schema import EnvConfig
 
 
-def get_backend(config: EnvConfig) -> Backend:
-    """Return the appropriate Backend instance for the given config."""
-    if config.backend == BackendType.PODMAN:
+def get_backend(config_or_type: EnvConfig | BackendType | str) -> Backend:
+    """Return the appropriate Backend instance for the given config or backend type."""
+    from raven.config.schema import EnvConfig
+    if isinstance(config_or_type, EnvConfig):
+        backend_type = config_or_type.backend
+    else:
+        backend_type = config_or_type
+
+    if backend_type == BackendType.PODMAN:
         from raven.backends.podman.backend import PodmanBackend
         return PodmanBackend()
-    elif config.backend == BackendType.FIRECRACKER:
+    elif backend_type == BackendType.FIRECRACKER:
         from raven.backends.firecracker.backend import FirecrackerBackend
         return FirecrackerBackend()
     else:
-        raise ValueError(f"Unknown backend: {config.backend}")
+        raise ValueError(f"Unknown backend: {backend_type}")
