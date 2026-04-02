@@ -121,8 +121,6 @@ def init(
         console.print(f"[red]Error:[/red] Environment '{name}' already exists at {e_dir}")
         raise typer.Exit(1)
 
-    e_dir.mkdir(parents=True, exist_ok=True)
-
     # 1. Determine workspace path under git root
     host, owner, repo = _parse_git_url(git_url)
     workspace_dir = git_root() / host / owner / repo
@@ -156,6 +154,10 @@ def init(
             subprocess.run(["git", "clone", git_url, str(workspace_dir)], check=True)
         except subprocess.CalledProcessError:
             console.print("[red]Error:[/red] Git clone failed.")
+            # Clean up partial clone if directory was created
+            if workspace_dir.exists():
+                import shutil
+                shutil.rmtree(workspace_dir)
             raise typer.Exit(1)
 
     # 2. Determine template
@@ -242,6 +244,7 @@ def init(
         raise typer.Exit(1)
 
     # 5. Save Config
+    e_dir.mkdir(parents=True, exist_ok=True)
     config_path = save_config(cfg, e_dir / "config.yaml")
 
     # 6. Create Environment
