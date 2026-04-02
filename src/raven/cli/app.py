@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+import logging
+try:
+    import readline  # noqa: F401
+except ImportError:
+    pass
+
 from pathlib import Path
 from typing import Optional
 

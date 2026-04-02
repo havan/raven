@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 
 import typer
+import questionary
 from rich.panel import Panel
 from rich.text import Text
 
@@ -74,10 +75,15 @@ def _setup_sudoers() -> bool:
     ]
     content = "\n".join(sudo_lines) + "\n"
 
-    panel_content = Text("Raven requires sudo privileges to manage network rules inside the container.\n", justify="center")
-    panel_content.append(f"The following lines will be added to [cyan]{sudoers_file}[/cyan]:\n\n")
+    panel_content = Text.from_markup(
+        "Raven requires sudo privileges to manage network rules inside the container.\n"
+        "You can either add specific [cyan]NOPASSWD[/cyan] rules for the Raven helper, "
+        "or choose to enter your password every time a network rule is applied.\n\n",
+        justify="center"
+    )
     sudoers_text = "\n".join(sudo_lines)
-    panel_content.append(f'[yellow]{sudoers_text}[/yellow]')
+    panel_content.append(Text("Proposed sudoers lines for no-password access:\n", style="bold"))
+    panel_content.append(Text(sudoers_text, style="yellow"))
 
     console.print(Panel(
         panel_content,
@@ -89,9 +95,16 @@ def _setup_sudoers() -> bool:
     if sudoers_file.exists():
         console.print(f"[yellow]Note: {sudoers_file} already exists. This will overwrite it.[/yellow]")
 
-    confirmed = typer.confirm(f"Do you want to write this configuration to {sudoers_file}?", default=True)
+    choice = questionary.select(
+        "Choose sudoers configuration:",
+        choices=[
+            questionary.Choice("Create sudoers file (no password prompt for network commands)", value="create"),
+            questionary.Choice("Enter password every time (manual sudo prompt)", value="password"),
+        ],
+        default="create"
+    ).ask()
 
-    if confirmed:
+    if choice == "create":
         try:
             command = ["sudo", "tee", str(sudoers_file)]
             proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -113,9 +126,9 @@ def _setup_sudoers() -> bool:
             console.print()
             return False
     else:
-        console.print("Skipping sudoers configuration. Raven network commands may not work.")
+        console.print("[green]✓ Raven will prompt for sudo password when needed.[/green]")
         console.print()
-        return False
+        return True
 
 
 def _setup_linger() -> bool:
@@ -134,7 +147,10 @@ def _setup_linger() -> bool:
             return True
         else:
             console.print("[yellow]User linger is disabled. This is required to keep environments running after you log out.[/yellow]")
-            confirmed = typer.confirm(f"Do you want to enable linger for user '{user}'?", default=True)
+            confirmed = questionary.confirm(
+                f"Do you want to enable linger for user '{user}'?",
+                default=True
+            ).ask()
             if confirmed:
                 enable_result = subprocess.run(
                     ["sudo", "loginctl", "enable-linger", user],
@@ -200,7 +216,7 @@ def _setup_path() -> bool:
             export_line = f'\nexport PATH="{local_bin}:$PATH"\n'
 
         console.print(f"I can add it to your [cyan]{rc_file}[/cyan] file.")
-        confirmed = typer.confirm("Do you want me to append the necessary line?", default=True)
+        confirmed = questionary.confirm("Do you want me to append the necessary line?", default=True).ask()
 
         if confirmed:
             try:
