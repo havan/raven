@@ -80,7 +80,10 @@ def save_resolved_ips(env_name: str, cidrs: list[str]) -> None:
     from raven.util.xdg import data_dir
 
     cache_dir = data_dir() / "networks"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_file = cache_dir / f"raven-{env_name}.json"
-    cache_file.write_text(json.dumps({"cidrs": cidrs}, indent=2))
-    log.debug("Cached resolved IPs: %s", cache_file)
+    try:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_file = cache_dir / f"raven-{env_name}.json"
+        cache_file.write_text(json.dumps({"cidrs": cidrs}, indent=2))
+        log.debug("Cached resolved IPs: %s", cache_file)
+    except Exception:
+        log.warning("Failed to cache resolved IPs for %s", env_name, exc_info=True)
