@@ -38,7 +38,11 @@ def load_config(path: Path | None = None) -> EnvConfig:
         raise FileNotFoundError(f"Config file not found: {path}")
 
     log.info("Loading config from %s", path)
-    raw = yaml.safe_load(path.read_text())
+    try:
+        raw = yaml.safe_load(path.read_text())
+    except yaml.YAMLError as e:
+        raise ValueError(f"Could not parse YAML in {path}: {e}") from e
+
     if not isinstance(raw, dict):
         raise ValueError(f"Expected a YAML mapping in {path}, got {type(raw).__name__}")
 

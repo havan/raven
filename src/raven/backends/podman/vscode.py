@@ -62,6 +62,11 @@ def setup_vscode_ssh(name: str, config: VSCodeConfig) -> dict[str, str]:
     ], check=False)
 
     # Write SSH config on host
+    if state.ssh_port == 0:
+        raise RuntimeError(
+            f"SSH port not configured for environment '{name}'. "
+            "Try re-creating the environment or check state.json."
+        )
     _write_ssh_config(name, state.ssh_port, key_path)
 
     if config.extensions:
@@ -136,8 +141,8 @@ def remove_ssh_config(name: str) -> None:
 
     existing = ssh_config_path.read_text()
     if begin in existing:
-        import re
         pattern = re.escape(begin) + r".*?" + re.escape(end) + r"\n?"
         existing = re.sub(pattern, "", existing, flags=re.DOTALL)
         ssh_config_path.write_text(existing)
         log.info("Removed SSH config for raven-%s", name)
+config for raven-%s", name)

@@ -191,8 +191,10 @@ def init(
             "mount_path": "/workspace",
         },
     }
-    # Merge template data over base config
-    cfg_dict.update(tpl_data)
+    # Merge template data into base config (best-effort, don't override name/source)
+    for k, v in tpl_data.items():
+        if k not in ("name", "source"):
+            cfg_dict[k] = v
 
     # Apply chosen run-phase policy (overrides any template default)
     cfg_dict.setdefault("network", {})

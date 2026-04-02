@@ -103,20 +103,19 @@ def destroy(
         log.warning("Could not instantiate backend for '%s': %s", name, exc)
         console.print(f"[yellow]Warning:[/yellow] Could not load backend: {exc}")
 
-    # Run backend cleanup; on failure warn and fall through to state cleanup
+    # Run backend cleanup
     if backend is not None:
         try:
             backend.destroy(name)
+            console.print(f"[red]Environment '{name}' destroyed.[/red]")
         except Exception as exc:
             log.warning("Backend destroy failed for '%s': %s", name, exc)
             console.print(f"[yellow]Warning:[/yellow] Backend cleanup failed: {exc}")
-            # Best-effort state removal so raven no longer tracks this env
-            try:
-                delete_state(name)
-            except Exception as e:
-                log.debug("State cleanup also failed for '%s': %s", name, e)
-
-    console.print(f"[red]Environment '{name}' destroyed.[/red]")
+            console.print(
+                f"[dim]The environment state was NOT removed. You may need to manually clean up resources\n"
+                f"and then run 'raven destroy {name}' again.[/dim]"
+            )
+            raise typer.Exit(1)
 
     if workspace is not None and workspace.exists():
         console.print(
@@ -234,6 +233,7 @@ def reinstall(
 
     if failed:
         console.print("[red]Reinstall failed. Network remains restricted.[/red]")
+        console.print(f"[dim]To restore network access: raven network policy {name} open[/dim]")
         raise typer.Exit(1)
 
     console.print(f"[bold]Restoring {previous_phase.value} phase...[/bold]")

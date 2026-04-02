@@ -6,6 +6,7 @@ import json
 import logging
 import socket
 from datetime import datetime, timezone
+from typing import Any
 
 from raven.backends.base import Backend, EnvInfo
 from raven.backends.podman.systemd import (
@@ -315,7 +316,14 @@ class PodmanBackend(Backend):
             raise RuntimeError(
                 f"Cannot get PID for container '{container_name(name)}' — is it running?"
             )
-        pid = int(pid_result.stdout.strip())
+
+        try:
+            pid = int(pid_result.stdout.strip())
+        except ValueError:
+            raise RuntimeError(
+                f"Cannot parse PID for container '{container_name(name)}': "
+                f"got '{pid_result.stdout.strip()}'"
+            )
 
         switch_phase(name, phase, config.network, pid)
         state.network_phase = phase

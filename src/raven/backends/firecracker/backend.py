@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from raven.backends.base import Backend, EnvInfo
 from raven.config.schema import EnvConfig, VSCodeConfig
 from raven.state.models import EnvStatus, NetworkPhase

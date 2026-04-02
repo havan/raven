@@ -48,7 +48,7 @@ Raven is a CLI tool that creates isolated dev environments (rootless Podman cont
 - **`backends/podman/systemd.py`** — Generates `.container` and `.network` Quadlet files into `~/.config/containers/systemd/`.
 - **`backends/podman/vscode.py`** — SSH keypair generation, injects pubkey into container, writes `~/.ssh/config` block with markers `# raven-begin/<name>` / `# raven-end/<name>`, launches `code --remote ssh-remote+raven-<name>`.
 - **`network/allowlists.py`** — `resolve_allowlist(hostnames)` returns CIDRs; uses `KNOWN_CDN_CIDRS` first, falls back to `dnspython`.
-- **`network/nftables.py`** — Generates `.nft` rule files to `~/.local/share/raven/nft-rules/`. Applies them with `sudo nft -f <file>`. One nftables table per env (`table inet raven-<name>`), matching on the Podman bridge interface name.
+- **`network/nftables.py`** — Generates `.nft` rule files to `~/.local/share/raven/nft-rules/`. Applies them via `raven-nft-helper`. One nftables table per env (`table inet raven-<name>`), matching on the Podman bridge interface name.
 - **`network/phases.py`** — `switch_phase(env_name, phase, network_config)`. Install phase: resolve IPs → write rule file → apply. Run/open phase: `nft delete table`.
 - **`util/subprocess.py`** — `run()` for captured output, `stream_exec()` for inherited terminal, `exec_replace()` for shell/interactive commands (`os.execvp`).
 - **`util/xdg.py`** — All XDG paths in one place: `data_dir()`, `env_dir(name)`, `nft_rules_dir()`, `quadlet_dir()`.
@@ -75,3 +75,4 @@ Rules use the OUTPUT chain (not FORWARD) because rootless Podman with netavark+p
 ### VS Code remote dev
 
 `raven code <name>` uses SSH mode (not devcontainer attach). This makes it backend-agnostic — the same code path will work when Firecracker is implemented. The SSH port is assigned at `raven create` time (random free port stored in `state.json`).
+tored in `state.json`).

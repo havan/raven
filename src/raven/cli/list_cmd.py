@@ -59,13 +59,14 @@ def list_envs(
             if refresh:
                 live = _live_status(name)
                 # Reconcile stale state with actual podman status
-                if live != EnvStatus.UNKNOWN and live != state.status:
+                if live != state.status:
                     log.debug(
                         "Reconciling state for '%s': %s → %s",
                         name, state.status.value, live.value,
                     )
                     state.status = live
-                    save_state(state)
+                    if live != EnvStatus.UNKNOWN:
+                        save_state(state)
             style = STATUS_STYLES.get(state.status, "")
             table.add_row(
                 state.name,
