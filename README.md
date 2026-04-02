@@ -13,17 +13,16 @@ applies. Your host stays untouched.
 ## How it works
 
 ```
-raven create myproject --config raven.yaml    # create container from config
-raven install myproject                       # npm ci / pip install with registry-only network
-raven shell myproject                         # interactive shell (full dev network)
-raven code myproject                          # open VS Code via Remote SSH
+raven init myproject https://github.com/owner/repo  # clone + create + prompt for policy
+raven install myproject                              # npm ci / pip install with registry-only network
+raven shell myproject                                # interactive shell
+raven code myproject                                 # open VS Code via Remote SSH
 ```
 
-During `raven install`, nftables rules are applied on the **host side** of the
-container's network interface. The container can only reach the domains you
-explicitly allow (npm registry, PyPI, GitHub, etc.). Everything else is dropped.
-When the install completes, rules are removed and the container gets normal
-network access.
+During `raven install`, nftables rules are applied inside the container's network
+namespace via `nsenter`. The container can only reach the domains you explicitly
+allow (npm registry, PyPI, GitHub, etc.). Everything else is dropped. When the
+install completes, the run-phase policy takes over automatically.
 
 ## Requirements
 
@@ -87,7 +86,7 @@ source:
 
 network:
   install_phase:
-    allowed_registries:
+    allowed_hosts:
       - registry.npmjs.org
       - github.com
   run_phase:
@@ -130,7 +129,8 @@ raven run my-node-app npm test   # run a command
 | Command | Description |
 |---|---|
 | `raven create <name>` | Create environment from `raven.yaml` (or `--config path`) |
-| `raven start <name>` | Start a stopped environment |
+| `raven init <name> <git-url>` | Clone a repo, detect template, prompt for policy, create environment |
+| `raven start <name>` | Start a stopped environment (applies run-phase policy immediately) |
 | `raven stop <name>` | Stop a running environment |
 | `raven shell <name>` | Open an interactive shell |
 | `raven install <name>` | Run `setup_commands` with restricted network |
@@ -141,6 +141,9 @@ raven run my-node-app npm test   # run a command
 | `raven ps <name>` | Show processes, ports, and resource usage |
 | `raven export <name>` | Print the config YAML (use `--portable` for sharing) |
 | `raven destroy <name>` | Stop and remove the environment |
+| `raven network status <name>` | Show current network policy, allowed hosts, and active CIDRs |
+| `raven network policy <name> <policy>` | Switch run-phase policy live without restarting |
+| `raven allow <name> <host>` | Add a host to the allowlist and apply rules immediately |
 
 ### Global options
 
@@ -165,6 +168,29 @@ raven reinstall my-node-app --purge --yes      # skip confirmation prompt
 `--purge` removes directories listed in `reinstall.purge_dirs` (defaults:
 `node_modules`, `.venv`, `venv`, `vendor`) relative to the workspace mount path.
 
+### raven network
+
+Inspect and control the network policy of a running environment without restarting it.
+
+```bash
+raven network status myenv              # show phase, policy, allowed hosts, active CIDRs
+raven network policy myenv open         # full internet access
+raven network policy myenv restricted   # only hosts in allowed_hosts
+raven network policy myenv offline      # no outbound traffic
+```
+
+### raven allow
+
+Add a host to the run-phase allowlist and apply the updated rules immediately:
+
+```bash
+raven allow myenv apt.example.com
+```
+
+If the current policy is `open` or `offline`, this automatically switches to
+`restricted` so the allowlist takes effect. The host is saved to `config.yaml`
+and survives restarts.
+
 ## Config file reference
 
 ```yaml
@@ -184,15 +210,15 @@ source:
 
 network:
   install_phase:
-    allowed_registries:    # hostnames reachable during `raven install`
+    allowed_hosts:         # hostnames reachable during `raven install`
       - registry.npmjs.org
       - pypi.org
       - github.com
       # full default list covers npm, PyPI, Go, GitHub, and common registries
     allow_dns: true
   run_phase:
-    policy: open           # "open" (default) | "allowlist" | "block"
-    allowed_hosts: []      # used when policy=allowlist
+    policy: open           # "open" (default) | "restricted" | "offline"
+    allowed_hosts: []      # used when policy=restricted
   port_forwards:
     - host: 3000           # port on your host
       container: 3000      # port inside container
@@ -226,9 +252,26 @@ vscode:
     editor.formatOnSave: true
 ```
 
-### Default allowed registries
+### Network policies
 
-If you don't specify `network.install_phase.allowed_registries`, raven allows:
+| Policy | Effect |
+|---|---|
+| `open` | Full internet access — nftables table is deleted entirely |
+| `restricted` | Only `allowed_hosts` are reachable; all other outbound traffic is dropped |
+| `offline` | No outbound traffic at all (loopback only) |
+
+The run-phase policy is applied automatically when the container starts. You can
+change it at any time without restarting:
+
+```bash
+raven network policy myenv offline     # lock it down
+raven allow myenv deb.debian.org       # open one host → switches to restricted
+raven network policy myenv open        # full access again
+```
+
+### Default allowed hosts (install phase)
+
+If you don't specify `network.install_phase.allowed_hosts`, raven allows:
 
 - **npm**: `registry.npmjs.org`, `registry.yarnpkg.com`
 - **PyPI**: `pypi.org`, `files.pythonhosted.org`, `bootstrap.pypa.io`
@@ -237,6 +280,12 @@ If you don't specify `network.install_phase.allowed_registries`, raven allows:
   `raw.githubusercontent.com`, `codeload.github.com`
 - **Container registries**: `ghcr.io`, `docker.io` and its auth endpoints
 - **uv**: `astral.sh`
+
+### Backward compatibility
+
+Older config files that use `allowed_registries` (instead of `allowed_hosts`) or
+the policy values `allowlist` / `block` (instead of `restricted` / `offline`)
+are loaded transparently and upgraded to the new names on next save.
 
 ## VS Code integration
 
@@ -284,18 +333,23 @@ Rules use the OUTPUT chain so they intercept traffic at the point it leaves the
 container, before it reaches the host. This works correctly with rootless Podman
 + netavark + pasta, where traffic bypasses the host's FORWARD chain entirely.
 
+The run-phase policy is enforced immediately on `raven start` and whenever
+`raven network policy` or `raven allow` is called. If `sudo nsenter` fails,
+raven logs a warning and continues in degraded mode — no isolation, but the
+container still runs.
+
 During the install phase:
 
-- Allowed registries are resolved to IP CIDRs. For CDN-backed registries (npm
-  via Cloudflare `104.16.0.0/12`, PyPI via Fastly `151.101.0.0/16`), known
-  stable CIDR ranges are used instead of point-in-time DNS to avoid rules
-  breaking when CDN IPs rotate.
+- Allowed hosts are resolved to IP CIDRs. For CDN-backed registries (npm via
+  Cloudflare `104.16.0.0/12`, PyPI via Fastly `151.101.0.0/16`), known stable
+  CIDR ranges are used instead of point-in-time DNS to avoid rules breaking when
+  CDN IPs rotate.
 - DNS (UDP/TCP port 53) is always allowed so hostnames resolve correctly.
 - Loopback traffic (`oifname "lo"`) is always allowed.
 - All other outbound traffic from the container is dropped.
 
-When the install phase completes (or `policy: open` applies), raven deletes the
-table entirely — no restrictions remain.
+When `policy: open` applies, raven deletes the table entirely — no restrictions
+remain.
 
 **Limitation:** DNS tunneling (data exfiltration encoded in DNS queries) is not
 blocked by default. This is an advanced attack vector. If you need to defend
