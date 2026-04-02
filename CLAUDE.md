@@ -32,7 +32,7 @@ Raven is a CLI tool that creates isolated dev environments (rootless Podman cont
 ### Core data flow
 
 1. User provides a `raven.yaml` config → validated by `config/schema.py` (Pydantic)
-2. `backends/` owns the lifecycle: `create()` writes Quadlet unit files + `state.json`, `start()` calls `systemctl --user start`
+2. `backends/` owns the lifecycle: `create()` writes a systemd `.service` unit file + `state.json`, `start()` regenerates the unit from config then calls `systemctl --user start`
 3. `network/` owns isolation: `phases.py` orchestrates DNS resolution → nftables rule generation → `sudo nft -f` application
 4. State persists to `~/.local/share/raven/envs/<name>/state.json`
 
@@ -45,7 +45,7 @@ Raven is a CLI tool that creates isolated dev environments (rootless Podman cont
 - **`backends/base.py`** — `Backend` ABC. All backends implement: `create`, `start`, `stop`, `destroy`, `exec`, `shell`, `status`, `list_all`, `get_info`, `apply_network_phase`, `setup_vscode`.
 - **`backends/__init__.py`** — `get_backend(config)` factory; maps `BackendType` enum to implementation class.
 - **`backends/podman/backend.py`** — `PodmanBackend`. Uses Quadlet files for systemd integration (not the deprecated `podman generate systemd`). Container name convention: `raven-<envname>`, all containers labelled `raven.managed=true`.
-- **`backends/podman/systemd.py`** — Generates `.container` and `.network` Quadlet files into `~/.config/containers/systemd/`.
+- **`backends/podman/systemd.py`** — Generates a plain systemd `.service` unit into `~/.config/systemd/user/`. Cleans up any legacy Quadlet files from `~/.config/containers/systemd/`.
 - **`backends/podman/vscode.py`** — SSH keypair generation, injects pubkey into container, writes `~/.ssh/config` block with markers `# raven-begin/<name>` / `# raven-end/<name>`, launches `code --remote ssh-remote+raven-<name>`.
 - **`network/allowlists.py`** — `resolve_allowlist(hostnames)` returns CIDRs; uses `KNOWN_CDN_CIDRS` first, falls back to `dnspython`.
 - **`network/nftables.py`** — Generates `.nft` rule files to `~/.local/share/raven/nft-rules/`. Applies them via `raven-nft-helper`. One nftables table per env (`table inet raven-<name>`), matching on the Podman bridge interface name.
@@ -75,5 +75,3 @@ Rules use the OUTPUT chain (not FORWARD) because rootless Podman with netavark+p
 ### VS Code remote dev
 
 `raven code <name>` uses SSH mode (not devcontainer attach). This makes it backend-agnostic — the same code path will work when Firecracker is implemented. The SSH port is assigned at `raven create` time (random free port stored in `state.json`).
-tored in `state.json`).
-tate.json`).
