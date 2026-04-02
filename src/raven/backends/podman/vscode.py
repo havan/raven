@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import re
 from pathlib import Path
 
 from raven.config.schema import VSCodeConfig
@@ -114,7 +115,6 @@ Host raven-{name}
         existing = ssh_config_path.read_text()
         if begin in existing:
             # Replace existing block
-            import re
             pattern = re.escape(begin) + r".*?" + re.escape(end)
             existing = re.sub(pattern, block.strip(), existing, flags=re.DOTALL)
             ssh_config_path.write_text(existing)
@@ -146,4 +146,3 @@ def remove_ssh_config(name: str) -> None:
         existing = re.sub(pattern, "", existing, flags=re.DOTALL)
         ssh_config_path.write_text(existing)
         log.info("Removed SSH config for raven-%s", name)
-config for raven-%s", name)
