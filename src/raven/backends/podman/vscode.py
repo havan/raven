@@ -60,8 +60,8 @@ def setup_vscode_ssh(name: str, config: VSCodeConfig) -> dict[str, str]:
         "which sshd > /dev/null 2>&1 || "
         "(apt-get update -qq && apt-get install -y -qq openssh-server > /dev/null 2>&1) && "
         "mkdir -p /run/sshd && "
-        "/usr/sbin/sshd",
-    ], check=False)
+        "(pgrep -x sshd > /dev/null 2>&1 || /usr/sbin/sshd)",
+    ], check=True)
 
     # Write SSH config on host
     if state.ssh_port == 0:
