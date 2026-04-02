@@ -50,15 +50,16 @@ ln -s "$(pwd)/.venv/bin/raven" ~/.local/bin/raven
 
 ### Sudoers setup (required for network isolation)
 
-Raven needs to apply nftables rules as root. Create `/etc/sudoers.d/raven`:
+Raven needs to apply nftables rules as root inside the container's network
+namespace. Create `/etc/sudoers.d/raven`:
 
 ```
-your-username ALL=(root) NOPASSWD: /usr/sbin/nft -f /home/your-username/.local/share/raven/nft-rules/*.nft
-your-username ALL=(root) NOPASSWD: /usr/sbin/nft delete table inet raven-*
+your-username ALL=(root) NOPASSWD: /usr/bin/nsenter --net=/proc/*/ns/net /usr/sbin/nft -f /home/your-username/.local/share/raven/nft-rules/*.nft
+your-username ALL=(root) NOPASSWD: /usr/bin/nsenter --net=/proc/*/ns/net /usr/sbin/nft delete table inet raven-*
 ```
 
-This limits sudo access to only the specific `nft` commands raven uses, scoped
-to its own rule files.
+This limits sudo access to only the specific `nsenter`+`nft` commands raven
+uses, scoped to its own rule files.
 
 ### Enable systemd linger (for persistent environments across logout)
 
@@ -278,16 +279,20 @@ raven install my-project
 ## Network isolation: technical details
 
 Raven creates one nftables table per environment (`table inet raven-<name>`)
-with rules that match on the Podman bridge interface name. During the install
-phase:
+with rules applied **inside the container's network namespace** via `nsenter`.
+Rules use the OUTPUT chain so they intercept traffic at the point it leaves the
+container, before it reaches the host. This works correctly with rootless Podman
++ netavark + pasta, where traffic bypasses the host's FORWARD chain entirely.
+
+During the install phase:
 
 - Allowed registries are resolved to IP CIDRs. For CDN-backed registries (npm
   via Cloudflare `104.16.0.0/12`, PyPI via Fastly `151.101.0.0/16`), known
   stable CIDR ranges are used instead of point-in-time DNS to avoid rules
   breaking when CDN IPs rotate.
 - DNS (UDP/TCP port 53) is always allowed so hostnames resolve correctly.
-- All other outbound traffic from the container is dropped at the host-side
-  interface.
+- Loopback traffic (`oifname "lo"`) is always allowed.
+- All other outbound traffic from the container is dropped.
 
 When the install phase completes (or `policy: open` applies), raven deletes the
 table entirely — no restrictions remain.

@@ -298,14 +298,19 @@ class PodmanBackend(Backend):
         config_path = env_dir(name) / "config.yaml"
         config = load_config(config_path)
 
-        iface = state.network_interface
-        if not iface:
-            # Fallback for envs created before this field was added
-            from raven.backends.podman.network import get_network_interface
-            iface = get_network_interface(name)
-            state.network_interface = iface
+        # Get the PID of a process inside the container's network namespace.
+        # Rules are applied via nsenter into that netns.
+        pid_result = run(
+            ["podman", "inspect", "--format", "{{.State.Pid}}", container_name(name)],
+            check=False,
+        )
+        if pid_result.returncode != 0 or not pid_result.stdout.strip():
+            raise RuntimeError(
+                f"Cannot get PID for container '{container_name(name)}' — is it running?"
+            )
+        pid = int(pid_result.stdout.strip())
 
-        switch_phase(name, phase, config.network, iface)
+        switch_phase(name, phase, config.network, pid)
         state.network_phase = phase
         save_state(state)
 

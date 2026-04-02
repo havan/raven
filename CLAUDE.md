@@ -60,12 +60,12 @@ Raven is a CLI tool that creates isolated dev environments (rootless Podman cont
 
 ### Network isolation requires sudo
 
-nftables rules run as root. A sudoers rule is needed:
+nftables rules are applied inside the container's network namespace using `nsenter`. A sudoers rule is needed:
 ```
-<user> ALL=(root) NOPASSWD: /usr/sbin/nft -f /home/<user>/.local/share/raven/nft-rules/*.nft
-<user> ALL=(root) NOPASSWD: /usr/sbin/nft delete table inet raven-*
+<user> ALL=(root) NOPASSWD: /usr/bin/nsenter --net=/proc/*/ns/net /usr/sbin/nft -f /home/<user>/.local/share/raven/nft-rules/*.nft
+<user> ALL=(root) NOPASSWD: /usr/bin/nsenter --net=/proc/*/ns/net /usr/sbin/nft delete table inet raven-*
 ```
-If `sudo nft` fails, `apply_network_phase()` logs a warning and continues (degraded mode — no isolation, but the install still runs).
+Rules use the OUTPUT chain (not FORWARD) because rootless Podman with netavark+pasta bypasses the host FORWARD chain entirely. If `sudo nsenter` fails, `apply_network_phase()` logs a warning and continues (degraded mode — no isolation, but the install still runs).
 
 ### VS Code remote dev
 

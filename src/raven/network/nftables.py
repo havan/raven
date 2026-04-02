@@ -11,13 +11,14 @@ from raven.util.xdg import nft_rules_dir
 log = logging.getLogger(__name__)
 
 
-def generate_install_rules(env_name: str, cidrs: list[str], iface: str) -> Path:
+def generate_install_rules(env_name: str, cidrs: list[str]) -> Path:
     """Generate nftables rule file for install phase (allowlist only).
+
+    Rules are applied inside the container's network namespace (OUTPUT chain).
 
     Args:
         env_name: Environment name.
         cidrs: List of allowed CIDR strings.
-        iface: Actual bridge interface name assigned by Podman/netavark.
 
     Returns:
         Path to the generated .nft file.
@@ -35,21 +36,24 @@ table inet {table_name} {{
         elements = {{ {ip_elements} }}
     }}
 
-    chain forward {{
-        type filter hook forward priority filter; policy accept;
+    chain output {{
+        type filter hook output priority filter; policy accept;
 
-        # Allow traffic from this env to allowed IPs
-        iifname "{iface}" ip daddr @allowed_ips accept
+        # Allow loopback
+        oifname "lo" accept
+
+        # Allow traffic to allowed IPs
+        ip daddr @allowed_ips accept
 
         # Allow DNS (needed for hostname resolution)
-        iifname "{iface}" udp dport 53 accept
-        iifname "{iface}" tcp dport 53 accept
+        udp dport 53 accept
+        tcp dport 53 accept
 
         # Allow established/related return traffic
-        iifname "{iface}" ct state established,related accept
+        ct state established,related accept
 
-        # Drop everything else from this env
-        iifname "{iface}" drop
+        # Drop everything else
+        drop
     }}
 }}
 """
@@ -62,16 +66,18 @@ table inet {table_name} {{
     return path
 
 
-def generate_block_rules(env_name: str, iface: str) -> Path:
-    """Generate nftables rules that block all outbound traffic."""
+def generate_block_rules(env_name: str) -> Path:
+    """Generate nftables rules that block all outbound traffic.
+
+    Rules are applied inside the container's network namespace (OUTPUT chain).
+    """
     table_name = f"raven-{env_name}"
 
     rules = f"""\
 table inet {table_name} {{
-    chain forward {{
-        type filter hook forward priority filter; policy accept;
-        iifname "{iface}" ct state established,related accept
-        iifname "{iface}" drop
+    chain output {{
+        type filter hook output priority filter; policy drop;
+        oifname "lo" accept
     }}
 }}
 """
@@ -84,23 +90,31 @@ table inet {table_name} {{
     return path
 
 
-def apply_rules(rule_file: Path, env_name: str) -> None:
-    """Apply nftables rules from a file using sudo.
+def apply_rules(rule_file: Path, env_name: str, pid: int) -> None:
+    """Apply nftables rules inside the container's network namespace.
 
     Deletes the table first so the load is always against a clean slate.
+
+    Args:
+        rule_file: Path to the .nft file to apply.
+        env_name: Environment name (used to delete any existing table first).
+        pid: PID of a process in the container's network namespace.
     """
-    # Best-effort delete so that a stale table from a previous failed run
-    # doesn't cause "File exists" when the new rules are loaded.
-    delete_table(env_name)
-    log.info("Applying nftables rules: %s", rule_file)
-    run_as_root(["nft", "-f", str(rule_file)])
+    netns = f"/proc/{pid}/ns/net"
+    delete_table(env_name, pid)
+    log.info("Applying nftables rules in netns %s: %s", netns, rule_file)
+    run_as_root(["nsenter", f"--net={netns}", "nft", "-f", str(rule_file)])
 
 
-def delete_table(env_name: str) -> None:
-    """Delete the nftables table for an environment (open network)."""
+def delete_table(env_name: str, pid: int) -> None:
+    """Delete the nftables table inside the container's network namespace."""
     table_name = f"raven-{env_name}"
-    log.info("Deleting nftables table: %s", table_name)
-    run_as_root(["nft", "delete", "table", "inet", table_name], check=False)
+    netns = f"/proc/{pid}/ns/net"
+    log.info("Deleting nftables table %s in netns %s", table_name, netns)
+    run_as_root(
+        ["nsenter", f"--net={netns}", "nft", "delete", "table", "inet", table_name],
+        check=False,
+    )
 
 
 def cleanup_rule_files(env_name: str) -> None:
