@@ -26,7 +26,10 @@ def edit(name: str = typer.Argument(..., help="Environment name.")) -> None:
     editor_cmd = shlex.split(editor)
 
     try:
-        subprocess.run([*editor_cmd, str(config_path)])
+        subprocess.run([*editor_cmd, str(config_path)], check=True)
     except FileNotFoundError:
         console.print(f"[red]Error:[/red] Could not find editor '{editor}'. Please set $EDITOR.")
+        raise typer.Exit(1)
+    except subprocess.CalledProcessError as e:
+        console.print(f"[red]Error:[/red] Editor '{editor}' failed with exit code {e.returncode}.")
         raise typer.Exit(1)
