@@ -177,7 +177,10 @@ def install(
     try:
         backend.apply_network_phase(name, NetworkPhase.RUN)
     except Exception as e:
-        log.warning("Could not restore network rules: %s", e)
+        log.error("Could not restore network rules: %s", e, exc_info=True)
+        console.print(f"[red]Error: Could not restore network rules: {e}[/red]")
+        console.print(f"[dim]To restore network access: raven network policy {name} run[/dim]")
+        raise typer.Exit(1)
 
     console.print("[green]Install completed successfully.[/green]")
 
@@ -260,7 +263,10 @@ def reinstall(
     try:
         backend.apply_network_phase(name, previous_phase)
     except Exception as e:
-        log.warning("Could not restore network rules: %s", e)
+        log.error("Could not restore network rules: %s", e, exc_info=True)
+        console.print(f"[red]Error: Could not restore network rules: {e}[/red]")
+        console.print(f"[dim]To restore network access: raven network policy {name} {previous_phase.value}[/dim]")
+        raise typer.Exit(1)
 
     console.print("[green]Reinstall completed successfully.[/green]")
 
