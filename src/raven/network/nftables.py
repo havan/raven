@@ -116,7 +116,13 @@ def apply_rules(rule_file: Path, env_name: str, pid: int) -> None:
 def delete_table(env_name: str, pid: int) -> None:
     """Delete the nftables table inside the container's network namespace."""
     log.info("Deleting nftables table for '%s' (PID %d)", env_name, pid)
-    run_as_root(["raven-nft-helper", "delete", env_name, str(pid)], check=False)
+    # We don't capture output here because the helper handles its own silence
+    # and we don't want to log harmless 'not found' errors in Raven's debug logs.
+    run_as_root(
+        ["raven-nft-helper", "delete", env_name, str(pid)],
+        check=False,
+        capture=False,
+    )
 
 
 def cleanup_rule_files(env_name: str) -> None:

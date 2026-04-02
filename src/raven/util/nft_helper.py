@@ -112,8 +112,9 @@ def main() -> None:
         table_name = f"raven-{env_name}"
         # Execute: nsenter --net=/proc/<pid>/ns/net nft delete table inet raven-<env_name>
         cmd = ["nsenter", f"--net={netns}", "nft", "delete", "table", "inet", table_name]
-        # delete table can fail if the table doesn't exist (e.g. already deleted), so we don't check
-        subprocess.run(cmd, check=False)
+        # delete table can fail if the table doesn't exist (e.g. already deleted),
+        # so we capture output to keep it silent and don't check the exit code.
+        subprocess.run(cmd, check=False, capture_output=True)
 
     else:
         print(f"Error: Unknown action '{action}'", file=sys.stderr)

@@ -40,7 +40,7 @@ def run(
 
 def run_as_root(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
     """Run a command with sudo (for nftables rule application)."""
-    return run(["sudo", "-n", *cmd], **kwargs)
+    return run(["sudo", *cmd], **kwargs)
 
 
 def exec_replace(cmd: list[str]) -> None:
