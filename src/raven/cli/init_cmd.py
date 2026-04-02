@@ -140,7 +140,32 @@ def init(
             console.print(f"[red]Error parsing template {template_file}:[/red] {e}")
             raise typer.Exit(1)
 
-    # 3. Construct Config
+    # 3. Prompt for run-phase network policy
+    _policy_choices = ["open", "restricted", "offline"]
+    _policy_descriptions = {
+        "open": "Full internet access",
+        "restricted": "Only allowed hosts (configure with raven allow)",
+        "offline": "No outbound network access",
+    }
+    console.print("\n[bold]Run phase network policy:[/bold]")
+    for i, p in enumerate(_policy_choices, 1):
+        console.print(f"  {i}. [cyan]{p}[/cyan] — {_policy_descriptions[p]}")
+
+    _raw_policy = typer.prompt("Choose policy (number or name)", default="1")
+    try:
+        _chosen_policy = _policy_choices[int(_raw_policy) - 1]
+    except (ValueError, IndexError):
+        _chosen_policy = _raw_policy if _raw_policy in _policy_choices else "open"
+
+    _initial_allowed_hosts: list[str] = []
+    if _chosen_policy == "restricted":
+        _hosts_raw = typer.prompt(
+            "Initial allowed hosts (comma-separated, or Enter to skip)", default=""
+        )
+        if _hosts_raw.strip():
+            _initial_allowed_hosts = [h.strip() for h in _hosts_raw.split(",") if h.strip()]
+
+    # 4. Construct Config
     cfg_dict = {
         "name": name,
         "source": {
@@ -152,16 +177,23 @@ def init(
     # Merge template data over base config
     cfg_dict.update(tpl_data)
 
+    # Apply chosen run-phase policy (overrides any template default)
+    cfg_dict.setdefault("network", {})
+    cfg_dict["network"].setdefault("run_phase", {})
+    cfg_dict["network"]["run_phase"]["policy"] = _chosen_policy
+    if _initial_allowed_hosts:
+        cfg_dict["network"]["run_phase"]["allowed_hosts"] = _initial_allowed_hosts
+
     try:
         cfg = EnvConfig.model_validate(cfg_dict)
     except ValidationError as e:
         console.print(f"[red]Configuration validation error:[/red]\n{e}")
         raise typer.Exit(1)
 
-    # 4. Save Config
+    # 5. Save Config
     config_path = save_config(cfg, e_dir / "config.yaml")
 
-    # 5. Create Environment
+    # 6. Create Environment
     backend = get_backend(cfg)
     console.print("Creating environment...")
     try:
@@ -173,6 +205,7 @@ def init(
     console.print(Panel(
         f"[bold green]Environment initialized and created:[/bold green] {cfg.name}\n"
         f"[dim]Template:[/dim] {selected_template}\n"
+        f"[dim]Run policy:[/dim] {_chosen_policy}\n"
         f"[dim]Workspace:[/dim] {workspace_dir}\n"
         f"[dim]Config:[/dim] {config_path}\n"
         f"[dim]Container:[/dim] {container_id}",

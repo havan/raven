@@ -6,7 +6,7 @@ import re
 from enum import Enum
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from raven.config.defaults import DEFAULT_PURGE_DIRS, DEFAULT_REGISTRIES
 
@@ -44,13 +44,28 @@ class PortForward(BaseModel):
 
 
 class InstallPhaseNetwork(BaseModel):
-    allowed_registries: list[str] = Field(default_factory=lambda: list(DEFAULT_REGISTRIES))
+    allowed_hosts: list[str] = Field(default_factory=lambda: list(DEFAULT_REGISTRIES))
     allow_dns: bool = True
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_legacy_allowed_registries(cls, data: object) -> object:
+        if isinstance(data, dict) and "allowed_registries" in data and "allowed_hosts" not in data:
+            data = dict(data)
+            data["allowed_hosts"] = data.pop("allowed_registries")
+        return data
 
 
 class RunPhaseNetwork(BaseModel):
-    policy: Literal["open", "allowlist", "block"] = "open"
+    policy: Literal["open", "restricted", "offline"] = "open"
     allowed_hosts: list[str] = Field(default_factory=list)
+
+    @field_validator("policy", mode="before")
+    @classmethod
+    def normalize_policy(cls, v: object) -> object:
+        if isinstance(v, str):
+            return {"allowlist": "restricted", "block": "offline"}.get(v, v)
+        return v
 
 
 class NetworkConfig(BaseModel):

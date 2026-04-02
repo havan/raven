@@ -49,6 +49,20 @@ def resolve_allowlist(hostnames: list[str]) -> list[str]:
         return sorted(cidrs)
 
 
+def load_resolved_ips(env_name: str) -> list[str]:
+    """Load cached resolved IPs from disk. Returns empty list if not found."""
+    import json
+    from raven.util.xdg import data_dir
+
+    cache_file = data_dir() / "networks" / f"raven-{env_name}.json"
+    if not cache_file.exists():
+        return []
+    try:
+        return json.loads(cache_file.read_text()).get("cidrs", [])
+    except Exception:
+        return []
+
+
 def save_resolved_ips(env_name: str, cidrs: list[str]) -> None:
     """Cache resolved IPs to disk for later reference."""
     import json

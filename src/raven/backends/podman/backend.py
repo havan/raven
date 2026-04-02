@@ -116,6 +116,14 @@ class PodmanBackend(Backend):
         state.status = EnvStatus.RUNNING
         state.started_at = datetime.now(timezone.utc).isoformat()
         save_state(state)
+
+        # Apply the configured run-phase network policy now that the container is up.
+        # Failures are non-fatal (degraded mode: no isolation but container still runs).
+        try:
+            self.apply_network_phase(name, NetworkPhase.RUN)
+        except Exception as exc:
+            log.warning("Could not apply network policy on start for '%s': %s", name, exc)
+
         log.info("Environment '%s' started", name)
 
     def stop(self, name: str, timeout: int = 10) -> None:

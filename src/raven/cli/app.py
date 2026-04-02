@@ -45,6 +45,7 @@ from raven.cli.ps import ps  # noqa: E402
 from raven.cli.export_cmd import export  # noqa: E402
 from raven.cli.init_cmd import init  # noqa: E402
 from raven.cli.edit_cmd import edit  # noqa: E402
+from raven.cli.network_cmd import allow, network_app  # noqa: E402
 
 app.command(name="create")(create)
 app.command(name="init")(init)
@@ -60,6 +61,8 @@ app.command(name="list")(list_envs)
 app.command(name="code")(code)
 app.command(name="ps")(ps)
 app.command(name="export")(export)
+app.add_typer(network_app, name="network")
+app.command(name="allow")(allow)
 
 
 def main_entry() -> None:

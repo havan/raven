@@ -45,7 +45,7 @@ def switch_to_install(env_name: str, network_config: NetworkConfig, pid: int) ->
     """Apply install-phase network rules (allowlist only)."""
     log.info("Switching '%s' to install phase (restricted network)", env_name)
 
-    registries = network_config.install_phase.allowed_registries
+    registries = network_config.install_phase.allowed_hosts
     cidrs = resolve_allowlist(registries)
     save_resolved_ips(env_name, cidrs)
 
@@ -64,17 +64,18 @@ def switch_to_run(env_name: str, network_config: NetworkConfig, pid: int) -> Non
         delete_table(env_name, pid)
         log.info("Run phase active: open network")
 
-    elif policy == "allowlist":
+    elif policy in ("restricted", "allowlist"):
         hosts = network_config.run_phase.allowed_hosts
         cidrs = resolve_allowlist(hosts)
+        save_resolved_ips(env_name, cidrs)
         rule_file = generate_install_rules(env_name, cidrs)
         apply_rules(rule_file, env_name, pid)
         log.info("Run phase active: %d CIDRs allowed", len(cidrs))
 
-    elif policy == "block":
+    elif policy in ("offline", "block"):
         rule_file = generate_block_rules(env_name)
         apply_rules(rule_file, env_name, pid)
-        log.info("Run phase active: network blocked")
+        log.info("Run phase active: network offline")
 
     else:
         raise ValueError(f"Unknown run phase policy: {policy}")
