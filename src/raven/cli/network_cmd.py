@@ -48,11 +48,13 @@ def status(
     run_cfg = config.network.run_phase
     install_cfg = config.network.install_phase
 
+    backend = get_backend(config)
+    live_status = backend.status(name)
     # Header line
-    status_color = "green" if state.status == EnvStatus.RUNNING else "yellow"
+    status_color = "green" if live_status == EnvStatus.RUNNING else "yellow"
     console.print(
         f"[bold]Environment:[/bold] {name}   "
-        f"[bold]Status:[/bold] [{status_color}]{state.status.value}[/{status_color}]"
+        f"[bold]Status:[/bold] [{status_color}]{live_status.value}[/{status_color}]"
     )
 
     t = Table(show_header=False, box=None, padding=(0, 1))
@@ -70,7 +72,7 @@ def status(
     t.add_row("Install allowed hosts:", ", ".join(install_cfg.allowed_hosts) or "[dim](none)[/dim]")
 
     if cidrs:
-        cidr_note = "" if state.status == EnvStatus.RUNNING else " [dim](from last session)[/dim]"
+        cidr_note = "" if live_status == EnvStatus.RUNNING else " [dim](from last session)[/dim]"
         t.add_row("Active CIDRs:", ", ".join(cidrs) + cidr_note)
     else:
         t.add_row("Active CIDRs:", "[dim](not yet resolved — run raven install or raven network policy)[/dim]")
@@ -118,7 +120,8 @@ def policy_cmd(
         )
         raise typer.Exit(0)
 
-    if state.status != EnvStatus.RUNNING:
+    backend = get_backend(config)
+    if backend.status(name) != EnvStatus.RUNNING:
         console.print(
             f"[red]Error:[/red] Environment '{name}' is not running. "
             "Use [cyan]raven edit[/cyan] to change config for next start."
@@ -136,7 +139,6 @@ def policy_cmd(
     config.network.run_phase.policy = normalized  # type: ignore[assignment]
     save_config(config, config_path)
 
-    backend = get_backend(config)
     try:
         backend.apply_network_phase(name, NetworkPhase.RUN)
     except Exception as exc:
@@ -170,7 +172,8 @@ def allow(
 
     config.network.run_phase.allowed_hosts.append(host)
 
-    if state.status != EnvStatus.RUNNING:
+    backend = get_backend(config)
+    if backend.status(name) != EnvStatus.RUNNING:
         save_config(config, config_path)
         console.print(
             f"[green]Host '{host}' saved to allowlist.[/green] "
@@ -193,7 +196,6 @@ def allow(
 
     save_config(config, config_path)
 
-    backend = get_backend(config)
     try:
         backend.apply_network_phase(name, NetworkPhase.RUN)
     except Exception as exc:

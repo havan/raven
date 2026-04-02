@@ -55,7 +55,7 @@ def shell(
     """Open an interactive shell inside an environment."""
     backend, _ = _get_backend_for_env(name)
     state = load_state(name)
-    if state.status != EnvStatus.RUNNING:
+    if backend.status(name) != EnvStatus.RUNNING:
         console.print(f"[yellow]Environment '{name}' is not running. Starting...[/yellow]")
         backend.start(name)
     backend.shell(name, shell_binary=shell_bin)
@@ -149,7 +149,7 @@ def install(
     backend, config = _get_backend_for_env(name)
     state = load_state(name)
 
-    if state.status != EnvStatus.RUNNING:
+    if backend.status(name) != EnvStatus.RUNNING:
         console.print(f"[yellow]Environment '{name}' is not running. Starting...[/yellow]")
         backend.start(name)
 
@@ -212,7 +212,7 @@ def reinstall(
     backend, config = _get_backend_for_env(name)
     state = load_state(name)
 
-    if state.status != EnvStatus.RUNNING:
+    if backend.status(name) != EnvStatus.RUNNING:
         console.print(f"[yellow]Environment '{name}' is not running. Starting...[/yellow]")
         backend.start(name)
 
@@ -286,8 +286,7 @@ def restart(
 ) -> None:
     """Restart an environment (stop then start)."""
     backend, _ = _get_backend_for_env(name)
-    state = load_state(name)
-    if state.status == EnvStatus.RUNNING:
+    if backend.status(name) == EnvStatus.RUNNING:
         backend.stop(name)
     backend.start(name)
     console.print(f"[green]Environment '{name}' restarted.[/green]")
@@ -303,7 +302,7 @@ def run_cmd(
     backend, _ = _get_backend_for_env(name)
     state = load_state(name)
 
-    if state.status != EnvStatus.RUNNING:
+    if backend.status(name) != EnvStatus.RUNNING:
         console.print(f"[yellow]Environment '{name}' is not running. Starting...[/yellow]")
         backend.start(name)
 

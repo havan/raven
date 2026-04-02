@@ -167,14 +167,14 @@ class PodmanBackend(Backend):
         log.info("Environment '%s' started", name)
 
     def stop(self, name: str, timeout: int = 10) -> None:
-        state = load_state(name)
-        if state.status == EnvStatus.STOPPED:
+        if self.status(name) == EnvStatus.STOPPED:
             log.warning("Environment '%s' is already stopped", name)
             return
 
         svc = _service_name(name)
         run(["systemctl", "--user", "stop", f"{svc}.service"], check=False)
 
+        state = load_state(name)
         state.status = EnvStatus.STOPPED
         state.started_at = None
         save_state(state)

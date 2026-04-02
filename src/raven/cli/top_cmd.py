@@ -25,7 +25,7 @@ def top(
     config = load_config(env_dir(name) / "config.yaml")
     backend = get_backend(config)
 
-    if state.status != EnvStatus.RUNNING:
+    if backend.status(name) != EnvStatus.RUNNING:
         console.print(f"[yellow]Environment '{name}' is not running.[/yellow]")
         raise typer.Exit(1)
 
