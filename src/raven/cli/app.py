@@ -42,14 +42,14 @@ from raven.cli.env_commands import destroy, install, reinstall, restart, run_cmd
 from raven.cli.list_cmd import list_cmd, ps  # noqa: E402
 from raven.cli.code import code  # noqa: E402
 from raven.cli.top_cmd import top  # noqa: E402
-from raven.cli.export_cmd import export
-from raven.cli.init_cmd import init
-from raven.cli.edit_cmd import edit
-from raven.cli.logs_cmd import logs
-from raven.cli.setup_cmd import setup
-from raven.cli.status_cmd import status
-from raven.cli.network_cmd import allow, network_app
-from raven.cli.config_cmd import config_app
+from raven.cli.export_cmd import export  # noqa: E402
+from raven.cli.init_cmd import init  # noqa: E402
+from raven.cli.edit_cmd import edit  # noqa: E402
+from raven.cli.logs_cmd import logs  # noqa: E402
+from raven.cli.setup_cmd import setup  # noqa: E402
+from raven.cli.status_cmd import status  # noqa: E402
+from raven.cli.network_cmd import allow, network_app  # noqa: E402
+from raven.cli.config_cmd import config_app  # noqa: E402
 
 app.command(name="create")(create)
 app.command(name="init")(init)
