@@ -58,25 +58,37 @@ def ensure_templates() -> None:
             t_path.write_text(yaml.dump(content, default_flow_style=False, sort_keys=False))
 
 
-def _parse_git_url(url: str) -> tuple[str, str]:
-    """Return (owner, repo) parsed from a git URL.
+def _parse_git_url(url: str) -> tuple[str, str, str]:
+    """Return (host, owner, repo) parsed from a git URL.
 
     Handles HTTPS (https://github.com/owner/repo[.git]) and
     SSH (git@github.com:owner/repo[.git]) formats.
     """
     cleaned = re.sub(r"\.git$", "", url.rstrip("/"))
     # SSH: anything@host:owner/repo
-    m = re.match(r"^[^@]+@[^:]+:(.+)$", cleaned)
+    m = re.match(r"^[^@]+@([^:]+):(.+)$", cleaned)
     if m:
-        path = m.group(1)
+        host = m.group(1)
+        path = m.group(2)
     else:
-        # HTTPS or bare host/path — strip protocol then take last two segments
-        path = re.sub(r"^[a-z+]+://", "", cleaned)
+        # HTTPS or bare host/path
+        m = re.match(r"^[a-z+]+://([^/]+)/(.+)$", cleaned)
+        if m:
+            host = m.group(1)
+            path = m.group(2)
+        else:
+            # Fallback for URLs without protocol or other formats
+            path = re.sub(r"^[a-z+]+://", "", cleaned)
+            parts = [p for p in path.split("/") if p]
+            if len(parts) >= 3:
+                return parts[0], parts[-2], parts[-1]
+            host = "github.com"  # Default fallback host
+            path = "/".join(parts)
 
     parts = [p for p in path.split("/") if p]
     if len(parts) >= 2:
-        return parts[-2], parts[-1]
-    return "unknown", parts[-1] if parts else "repo"
+        return host, "/".join(parts[:-1]), parts[-1]
+    return host, "unknown", parts[-1] if parts else "repo"
 
 
 def detect_template(workspace_path: Path) -> Optional[str]:
@@ -112,12 +124,32 @@ def init(
     e_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. Determine workspace path under git root
-    owner, repo = _parse_git_url(git_url)
-    workspace_dir = git_root() / owner / repo
+    host, owner, repo = _parse_git_url(git_url)
+    workspace_dir = git_root() / host / owner / repo
     workspace_dir.parent.mkdir(parents=True, exist_ok=True)
 
     if workspace_dir.exists():
-        console.print(f"[yellow]Note:[/yellow] Workspace already exists at {workspace_dir} — skipping clone.")
+        # Verify that the existing repo matches the requested URL
+        try:
+            current_remote = subprocess.check_output(
+                ["git", "-C", str(workspace_dir), "remote", "get-url", "origin"],
+                text=True,
+                stderr=subprocess.DEVNULL
+            ).strip()
+
+            # Basic normalization for comparison (strip .git and trailing slashes)
+            def normalize(u: str) -> str:
+                return re.sub(r"\.git$", "", u.rstrip("/"))
+
+            if normalize(current_remote) != normalize(git_url):
+                console.print(f"[red]Error:[/red] Workspace already exists at {workspace_dir} but points to a different remote: {current_remote}")
+                console.print(f"Please use a different environment name or remove the existing directory.")
+                raise typer.Exit(1)
+
+            console.print(f"[yellow]Note:[/yellow] Workspace already exists at {workspace_dir} and matches remote — skipping clone.")
+        except subprocess.CalledProcessError:
+            console.print(f"[red]Error:[/red] Directory {workspace_dir} exists but is not a valid git repository or has no 'origin' remote.")
+            raise typer.Exit(1)
     else:
         console.print(f"Cloning {git_url} into {workspace_dir}...")
         try:
