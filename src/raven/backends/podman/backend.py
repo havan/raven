@@ -119,11 +119,33 @@ class PodmanBackend(Backend):
         save_state(state)
 
         # Apply the configured run-phase network policy now that the container is up.
-        # Failures are non-fatal (degraded mode: no isolation but container still runs).
         try:
             self.apply_network_phase(name, NetworkPhase.RUN)
         except Exception as exc:
-            log.warning("Could not apply network policy on start for '%s': %s", name, exc)
+            # Check the configured run policy. If it's not 'open', this failure is fatal.
+            from raven.config.loader import load_config
+            from raven.util.xdg import env_dir
+
+            config = load_config(env_dir(name) / "config.yaml")
+            policy = config.network.run_phase.policy
+
+            if policy != "open":
+                log.error(
+                    "Failed to apply mandatory network policy '%s' for '%s': %s",
+                    policy,
+                    name,
+                    exc,
+                    exc_info=True,
+                )
+                self.stop(name)
+                raise
+            else:
+                # Degraded mode: no isolation but container still runs for "open" policies.
+                log.warning(
+                    "Could not apply network policy on start for '%s' (degraded mode): %s",
+                    name,
+                    exc,
+                )
 
         log.info("Environment '%s' started", name)
 
