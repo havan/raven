@@ -184,6 +184,9 @@ def init(
     else:
         try:
             tpl_data = yaml.safe_load(template_file.read_text()) or {}
+            if not isinstance(tpl_data, dict):
+                console.print(f"[red]Error:[/red] Template {template_file} must be a YAML mapping.")
+                raise typer.Exit(1)
         except yaml.YAMLError as e:
             console.print(f"[red]Error parsing template {template_file}:[/red] {e}")
             raise typer.Exit(1)
