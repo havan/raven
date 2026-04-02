@@ -11,7 +11,7 @@ from raven.util.xdg import nft_rules_dir
 log = logging.getLogger(__name__)
 
 
-def generate_install_rules(env_name: str, cidrs: list[str]) -> Path:
+def generate_install_rules(env_name: str, cidrs: list[str], resolvers: list[str] | None = None) -> Path:
     """Generate nftables rule file for install phase (allowlist only).
 
     Rules are applied inside the container's network namespace (OUTPUT chain).
@@ -19,22 +19,30 @@ def generate_install_rules(env_name: str, cidrs: list[str]) -> Path:
     Args:
         env_name: Environment name.
         cidrs: List of allowed CIDR strings.
+        resolvers: List of trusted resolver IP addresses. If None,
+                  read from /etc/resolv.conf.
 
     Returns:
         Path to the generated .nft file.
     """
     table_name = f"raven-{env_name}"
 
+    if resolvers is None:
+        resolvers = _get_host_resolvers()
+
     ip_elements = ", ".join(cidrs) if cidrs else "0.0.0.0/32"  # dummy if empty
 
     # Only allow DNS if we have an allowlist (otherwise DNS is useless and a tunneling risk)
     dns_rules = ""
-    if cidrs:
-        dns_rules = """\
-        # Allow DNS (needed for hostname resolution)
-        udp dport 53 accept
-        tcp dport 53 accept
+    if cidrs and resolvers:
+        resolver_elements = ", ".join(resolvers)
+        dns_rules = f"""\
+        # Allow DNS (only to trusted resolvers)
+        udp daddr {{ {resolver_elements} }} dport 53 accept
+        tcp daddr {{ {resolver_elements} }} dport 53 accept
 """
+    elif cidrs:
+        log.warning("No resolvers found for '%s' — DNS access will be blocked.", env_name)
     else:
         log.warning("Empty allowlist for '%s' — DNS access will be blocked.", env_name)
 
@@ -71,6 +79,20 @@ table inet {table_name} {{
     path.write_text(rules)
     log.info("Generated nftables rules: %s", path)
     return path
+
+
+def _get_host_resolvers() -> list[str]:
+    """Read nameservers from /etc/resolv.conf."""
+    resolvers = []
+    try:
+        conf = Path("/etc/resolv.conf")
+        if conf.exists():
+            for line in conf.read_text().splitlines():
+                if line.startswith("nameserver "):
+                    resolvers.append(line.split()[1])
+    except Exception:
+        pass
+    return resolvers
 
 
 def generate_block_rules(env_name: str) -> Path:
