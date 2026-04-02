@@ -53,12 +53,12 @@ Raven needs to apply nftables rules as root inside the container's network
 namespace. Create `/etc/sudoers.d/raven`:
 
 ```
-your-username ALL=(root) NOPASSWD: /usr/bin/nsenter --net=/proc/*/ns/net /usr/sbin/nft -f /home/your-username/.local/share/raven/nft-rules/*.nft
-your-username ALL=(root) NOPASSWD: /usr/bin/nsenter --net=/proc/*/ns/net /usr/sbin/nft delete table inet raven-*
+your-username ALL=(root) NOPASSWD: /usr/local/bin/raven-nft-helper apply *
+your-username ALL=(root) NOPASSWD: /usr/local/bin/raven-nft-helper delete *
 ```
 
-This limits sudo access to only the specific `nsenter`+`nft` commands raven
-uses, scoped to its own rule files.
+This limits `sudo` access to only the specific helper that performs strict validation of the environment name, PID, and rule file path before applying any network rules.
+
 
 ### Enable systemd linger (for persistent environments across logout)
 

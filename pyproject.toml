@@ -25,6 +25,7 @@ dev = [
 
 [project.scripts]
 raven = "raven.cli.app:main_entry"
+raven-nft-helper = "raven.util.nft_helper:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/raven"]

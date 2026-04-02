@@ -93,28 +93,23 @@ table inet {table_name} {{
 def apply_rules(rule_file: Path, env_name: str, pid: int) -> None:
     """Apply nftables rules inside the container's network namespace.
 
-    Deletes the table first so the load is always against a clean slate.
+    Uses a root-owned helper script for security.
 
     Args:
         rule_file: Path to the .nft file to apply.
-        env_name: Environment name (used to delete any existing table first).
+        env_name: Environment name.
         pid: PID of a process in the container's network namespace.
     """
-    netns = f"/proc/{pid}/ns/net"
+    # Delete table first so the load is always against a clean slate.
     delete_table(env_name, pid)
-    log.info("Applying nftables rules in netns %s: %s", netns, rule_file)
-    run_as_root(["nsenter", f"--net={netns}", "nft", "-f", str(rule_file)])
+    log.info("Applying nftables rules for '%s' (PID %d): %s", env_name, pid, rule_file)
+    run_as_root(["raven-nft-helper", "apply", env_name, str(pid), str(rule_file)])
 
 
 def delete_table(env_name: str, pid: int) -> None:
     """Delete the nftables table inside the container's network namespace."""
-    table_name = f"raven-{env_name}"
-    netns = f"/proc/{pid}/ns/net"
-    log.info("Deleting nftables table %s in netns %s", table_name, netns)
-    run_as_root(
-        ["nsenter", f"--net={netns}", "nft", "delete", "table", "inet", table_name],
-        check=False,
-    )
+    log.info("Deleting nftables table for '%s' (PID %d)", env_name, pid)
+    run_as_root(["raven-nft-helper", "delete", env_name, str(pid)], check=False)
 
 
 def cleanup_rule_files(env_name: str) -> None:

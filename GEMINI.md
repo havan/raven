@@ -87,8 +87,8 @@ uv run pytest tests/
 ### Network Isolation (Sudoers)
 nftables rules are applied inside the container's network namespace via `nsenter`. A sudoers rule is mandatory:
 ```
-<user> ALL=(root) NOPASSWD: /usr/bin/nsenter --net=/proc/*/ns/net /usr/sbin/nft -f /home/<user>/.local/share/raven/nft-rules/*.nft
-<user> ALL=(root) NOPASSWD: /usr/bin/nsenter --net=/proc/*/ns/net /usr/sbin/nft delete table inet raven-*
+<user> ALL=(root) NOPASSWD: /usr/local/bin/raven-nft-helper apply *
+<user> ALL=(root) NOPASSWD: /usr/local/bin/raven-nft-helper delete *
 ```
 
 ### Live Network Control
