@@ -16,11 +16,6 @@ class EnvStatus(str, Enum):
     UNKNOWN = "unknown"
 
 
-class NetworkPhase(str, Enum):
-    INSTALL = "install"
-    RUN = "run"
-
-
 class EnvState(BaseModel):
     """Persistent configuration state for an environment.
 
@@ -30,7 +25,7 @@ class EnvState(BaseModel):
 
     name: str
     container_id: str = ""
-    network_phase: NetworkPhase = NetworkPhase.RUN
+    guard_preset: str = "open"
     ssh_port: int = 0
     install_completed: bool = False
     backend: str = "podman"

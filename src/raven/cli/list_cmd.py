@@ -79,16 +79,15 @@ def list_envs(
         return
 
     table = Table(title="Raven Environments")
-    table.add_column("Name", style="bold")
+    table.add_column("Name", style="bold cyan")
     table.add_column("Status")
+    table.add_column("Guard")
     table.add_column("Uptime")
     if stats:
         table.add_column("CPU")
         table.add_column("Memory")
-    table.add_column("Backend", style="dim")
-    table.add_column("SSH Port", style="dim")
-    table.add_column("Network", style="dim")
-    table.add_column("Created", style="dim")
+    table.add_column("SSH", style="dim")
+    table.add_column("Ports", style="dim")
 
     for name in names:
         try:
@@ -104,9 +103,17 @@ def list_envs(
                 else "-"
             )
 
+            # Format port forwards for the list view
+            ports_summary = "-"
+            if config.network.port_forwards:
+                ports_summary = ", ".join([str(pf.host) for pf in config.network.port_forwards[:3]])
+                if len(config.network.port_forwards) > 3:
+                    ports_summary += "..."
+
             row = [
                 state.name,
                 f"[{style}]{live_status.value}[/{style}]",
+                state.guard_preset,
                 uptime,
             ]
 
@@ -124,10 +131,8 @@ def list_envs(
                     row.append("-")
 
             row.extend([
-                state.backend,
                 str(state.ssh_port) if state.ssh_port else "-",
-                state.network_phase.value,
-                state.created_at[:19] if state.created_at else "-",
+                ports_summary,
             ])
             table.add_row(*row)
         except Exception as e:

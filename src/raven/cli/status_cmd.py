@@ -53,7 +53,7 @@ def _status_single(name: str) -> None:
     rows = [
         ("Status", f"[{style}]{live_status.value}[/{style}]"),
         ("Backend", state.backend),
-        ("Network Policy", state.network_phase.value),
+        ("Guard", state.guard_preset),
         ("SSH Port", str(state.ssh_port) if state.ssh_port else "-"),
         ("Uptime", uptime),
         ("CPU", cpu),
@@ -61,8 +61,13 @@ def _status_single(name: str) -> None:
         ("Created", state.created_at[:19] if state.created_at else "-"),
     ]
     if config:
-        rows.insert(2, ("Image", config.image))
+        rows.insert(2, ("Image", config.image or "(build)"))
         rows.insert(3, ("Source", str(getattr(config.source, "path", getattr(config.source, "url", "")))))
+        
+        # Add port forwards
+        if config.network.port_forwards:
+            pf_list = [f"{pf.host}:{pf.container}/{pf.protocol}" for pf in config.network.port_forwards]
+            rows.append(("Port Forwards", ", ".join(pf_list)))
 
     table = Table(show_header=False, box=None, padding=(0, 1))
     table.add_column("Key", style="dim", min_width=16)

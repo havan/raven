@@ -44,7 +44,8 @@ def main(
 
 # Import and register sub-commands
 from raven.cli.create import create  # noqa: E402
-from raven.cli.env_commands import destroy, install, reinstall, restart, run_cmd, shell, start, stop  # noqa: E402
+from raven.cli.env_commands import destroy, restart, shell, start, stop, purge  # noqa: E402
+from raven.cli.run import run_cmd  # noqa: E402
 from raven.cli.list_cmd import list_cmd, ps  # noqa: E402
 from raven.cli.code import code  # noqa: E402
 from raven.cli.top_cmd import top  # noqa: E402
@@ -54,7 +55,8 @@ from raven.cli.edit_cmd import edit  # noqa: E402
 from raven.cli.logs_cmd import logs  # noqa: E402
 from raven.cli.setup_cmd import setup  # noqa: E402
 from raven.cli.status_cmd import status  # noqa: E402
-from raven.cli.network_cmd import allow, network_app  # noqa: E402
+from raven.cli.guard import guard_cmd, allow  # noqa: E402
+from raven.cli.fw import fw_cmd  # noqa: E402
 from raven.cli.config_cmd import config_app  # noqa: E402
 
 app.command(name="create")(create)
@@ -66,20 +68,21 @@ app.command(name="stop")(stop)
 app.command(name="restart")(restart)
 app.command(name="shell")(shell)
 app.command(name="destroy")(destroy)
-app.command(name="install")(install)
-app.command(name="reinstall")(reinstall)
+app.command(name="purge")(purge)
 app.command(name="run")(run_cmd)
 app.command(name="list")(list_cmd)
 app.command(name="ls")(list_cmd)
 app.command(name="status")(status)
+app.command(name="show")(status)
 app.command(name="logs")(logs)
 app.command(name="code")(code)
 app.command(name="top")(top)
 app.command(name="ps")(ps)
 app.command(name="export")(export)
-app.add_typer(network_app, name="network")
-app.add_typer(config_app, name="config")
+app.command(name="guard")(guard_cmd)
+app.command(name="fw")(fw_cmd)
 app.command(name="allow")(allow)
+app.add_typer(config_app, name="config")
 
 
 def main_entry() -> None:

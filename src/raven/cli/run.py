@@ -1,4 +1,4 @@
-"""raven setup — run environment setup commands under a guard."""
+"""raven run — run a command inside an environment."""
 
 from __future__ import annotations
 
@@ -16,21 +16,20 @@ from raven.util.xdg import env_dir
 
 log = logging.getLogger(__name__)
 
-def setup(
+def run_cmd(
     name: str = typer.Argument(..., help="Environment name."),
-    guard: str = typer.Option("registries", "--guard", "-g", help="Guard to use for setup."),
+    command: list[str] = typer.Argument(..., help="Command to run inside the environment."),
+    guard: Optional[str] = typer.Option(None, "--guard", "-g", help="Temporary network guard for this command."),
+    workdir: Optional[str] = typer.Option(None, "--workdir", "-w", help="Working directory."),
+    user: Optional[str] = typer.Option(None, "--user", "-u", help="User to run as."),
 ) -> None:
-    """Run the environment setup_commands under a specific guard."""
+    """Run a command inside an environment, optionally under a specific guard."""
     config_path = env_dir(name) / "config.yaml"
     try:
         config = load_config(config_path)
     except Exception as e:
         console.print(f"[red]Error loading config:[/red] {e}")
         raise typer.Exit(1)
-
-    if not config.setup_commands:
-        console.print("[yellow]No setup_commands defined in config.[/yellow]")
-        raise typer.Exit(0)
 
     backend = get_backend(config)
 
@@ -40,11 +39,11 @@ def setup(
 
     state = load_state(name)
     original_guard = state.guard_preset
+    log.debug("Original guard: %s, target guard: %s", original_guard, guard)
 
-    console.print(f"[bold]Running setup commands under guard: [cyan]{guard}[/cyan][/bold]")
-    
     # Apply temporary guard
-    if guard != original_guard:
+    if guard and guard != original_guard:
+        console.print(f"[dim]Switching to temporary guard: {guard}...[/dim]")
         try:
             backend.apply_guard(name, guard)
         except Exception as e:
@@ -52,19 +51,22 @@ def setup(
             raise typer.Exit(1)
 
     try:
-        for cmd in config.setup_commands:
-            console.print(f"[dim]$ {cmd}[/dim]")
-            exit_code = backend.exec(name, ["bash", "-c", cmd])
-            if exit_code != 0:
-                console.print(f"[red]Command failed with exit code {exit_code}:[/red] {cmd}")
-                raise typer.Exit(exit_code)
+        exit_code = backend.exec(
+            name,
+            command,
+            workdir=workdir,
+            user=user,
+            tty=True,
+            interactive=True,
+        )
     finally:
         # Restore original guard
-        if guard != original_guard:
+        if guard and guard != original_guard:
             console.print(f"[dim]Restoring original guard: {original_guard}...[/dim]")
             try:
                 backend.apply_guard(name, original_guard)
             except Exception as e:
                 console.print(f"[red]Error restoring guard:[/red] {e}")
+                # We don't raise here to preserve the exit code of the command
 
-    console.print("[bold green]Setup completed successfully.[/bold green]")
+    raise typer.Exit(exit_code)

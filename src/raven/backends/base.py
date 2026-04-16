@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from raven.config.schema import EnvConfig, VSCodeConfig
-from raven.state.models import EnvStatus, NetworkPhase
+from raven.state.models import EnvStatus
 
 
 @dataclass
@@ -58,6 +58,7 @@ class Backend(ABC):
         env: dict[str, str] | None = None,
         tty: bool = False,
         interactive: bool = False,
+        replace: bool = False,
     ) -> int:
         """Run a command inside the environment. Returns exit code."""
 
@@ -78,8 +79,8 @@ class Backend(ABC):
         """Get detailed info about a specific environment."""
 
     @abstractmethod
-    def apply_network_phase(self, name: str, phase: NetworkPhase) -> None:
-        """Switch nftables rules between install and run phases."""
+    def apply_guard(self, name: str, preset: str) -> None:
+        """Apply a network guard preset (open, restricted, offline, registries, etc.)."""
 
     @abstractmethod
     def setup_vscode(self, name: str, config: VSCodeConfig) -> dict[str, str]:

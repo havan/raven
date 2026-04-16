@@ -195,7 +195,7 @@ def init(
             console.print(f"[red]Error parsing template {template_file}:[/red] {e}")
             raise typer.Exit(1)
 
-    # 3. Prompt for run-phase network policy
+    # 3. Prompt for initial network guard
     _policy_choices = ["open", "restricted", "offline"]
     _policy_descriptions = {
         "open": "Full internet access",
@@ -204,7 +204,7 @@ def init(
     }
     
     _chosen_policy = questionary.select(
-        "Choose run-phase network policy:",
+        "Choose initial network guard:",
         choices=[
             questionary.Choice(f"{p} — {_policy_descriptions[p]}", value=p)
             for p in _policy_choices
@@ -235,12 +235,11 @@ def init(
         if k not in ("name", "source"):
             cfg_dict[k] = v
 
-    # Apply chosen run-phase policy (overrides any template default)
+    # Apply chosen guard (overrides any template default)
     cfg_dict.setdefault("network", {})
-    cfg_dict["network"].setdefault("run_phase", {})
-    cfg_dict["network"]["run_phase"]["policy"] = _chosen_policy
+    cfg_dict["network"]["policy"] = _chosen_policy
     if _initial_allowed_hosts:
-        cfg_dict["network"]["run_phase"]["allowed_hosts"] = _initial_allowed_hosts
+        cfg_dict["network"]["allowed_hosts"] = _initial_allowed_hosts
 
     try:
         cfg = EnvConfig.model_validate(cfg_dict)
@@ -264,11 +263,11 @@ def init(
     console.print(Panel(
         f"[bold green]Environment initialized and created:[/bold green] {cfg.name}\n"
         f"[dim]Template:[/dim] {selected_template}\n"
-        f"[dim]Run policy:[/dim] {_chosen_policy}\n"
+        f"[dim]Initial Guard:[/dim] {_chosen_policy}\n"
         f"[dim]Workspace:[/dim] {workspace_dir}\n"
         f"[dim]Config:[/dim] {config_path}\n"
         f"[dim]Container:[/dim] {container_id}",
         title="raven init",
         border_style="green",
     ))
-    console.print(f"You can now run [cyan]raven start {name}[/cyan] or [cyan]raven install {name}[/cyan].")
+    console.print(f"You can now run [cyan]raven start {name}[/cyan] and then [cyan]raven setup {name}[/cyan].")

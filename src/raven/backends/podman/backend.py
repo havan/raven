@@ -15,7 +15,7 @@ from raven.backends.podman.systemd import (
     remove_service_files,
 )
 from raven.config.schema import EnvConfig, VSCodeConfig
-from raven.state.models import EnvState, EnvStatus, NetworkPhase
+from raven.state.models import EnvState, EnvStatus
 from raven.state.store import delete_state, load_state, save_state, state_exists
 from raven.util.subprocess import exec_replace, run, stream_exec
 
@@ -46,6 +46,18 @@ class PodmanBackend(Backend):
                 f"Environment '{config.name}' already exists. "
                 "Use 'raven destroy' first."
             )
+
+        # Build image if requested
+        if config.build:
+            log.info("Building image from Dockerfile...")
+            build_name = f"raven-build-{config.name}"
+            run([
+                "podman", "build",
+                "-f", config.build.dockerfile,
+                "-t", build_name,
+                config.build.context
+            ])
+            config.image = build_name
 
         ssh_port = _find_free_port()
         log.info("Assigned SSH port %d for environment '%s'", ssh_port, config.name)
@@ -121,20 +133,16 @@ class PodmanBackend(Backend):
             state.container_id = id_result.stdout.strip()
             save_state(state)
 
-        # Apply the configured run-phase network policy now that the container is up.
+        # Apply the configured guard preset now that the container is up.
         try:
-            self.apply_network_phase(name, NetworkPhase.RUN)
+            self.apply_guard(name, config.network.policy)
         except Exception as exc:
-            # Check the configured run policy. If it's not 'open', this failure is fatal.
-            from raven.config.loader import load_config
-            from raven.util.xdg import env_dir
-
-            config = load_config(env_dir(name) / "config.yaml")
-            policy = config.network.run_phase.policy
+            # Check the configured policy. If it's not 'open', this failure is fatal.
+            policy = config.network.policy
 
             if policy != "open":
                 log.error(
-                    "Failed to apply mandatory network policy '%s' for '%s': %s",
+                    "Failed to apply mandatory guard preset '%s' for '%s': %s",
                     policy,
                     name,
                     exc,
@@ -145,7 +153,7 @@ class PodmanBackend(Backend):
             else:
                 # Degraded mode: no isolation but container still runs for "open" policies.
                 log.warning(
-                    "Could not apply network policy on start for '%s' (degraded mode): %s",
+                    "Could not apply guard preset on start for '%s' (degraded mode): %s",
                     name,
                     exc,
                 )
@@ -205,6 +213,7 @@ class PodmanBackend(Backend):
         env: dict[str, str] | None = None,
         tty: bool = False,
         interactive: bool = False,
+        replace: bool = False,
     ) -> int:
         cmd = ["podman", "exec"]
         if tty and interactive:
@@ -224,10 +233,10 @@ class PodmanBackend(Backend):
         cmd.append(container_name(name))
         cmd.extend(command)
 
-        if tty and interactive:
-            # Replace process for interactive use
+        if replace and tty and interactive:
+            # Replace process for interactive use (useful for shell)
             exec_replace(cmd)
-            return 0  # unreachable, but satisfies type checker
+            return 0  # unreachable
         else:
             return stream_exec(cmd)
 
@@ -237,6 +246,7 @@ class PodmanBackend(Backend):
             [shell_binary],
             tty=True,
             interactive=True,
+            replace=True,
         )
 
     def status(self, name: str) -> EnvStatus:
@@ -324,9 +334,9 @@ class PodmanBackend(Backend):
             created_at=data.get("Created", ""),
         )
 
-    def apply_network_phase(self, name: str, phase: NetworkPhase) -> None:
+    def apply_guard(self, name: str, preset: str) -> None:
         from raven.config.loader import load_config
-        from raven.network.phases import switch_phase
+        from raven.network.guard import apply_guard
         from raven.util.xdg import env_dir
 
         state = load_state(name)
@@ -352,8 +362,8 @@ class PodmanBackend(Backend):
                 f"got '{pid_result.stdout.strip()}'"
             )
 
-        switch_phase(name, phase, config.network, pid)
-        state.network_phase = phase
+        apply_guard(name, preset, config.network, pid)
+        state.guard_preset = preset
         save_state(state)
 
     def setup_vscode(self, name: str, config: VSCodeConfig) -> dict[str, str]:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from enum import Enum
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -43,22 +43,10 @@ class PortForward(BaseModel):
     bind_host: str = "127.0.0.1"
 
 
-class InstallPhaseNetwork(BaseModel):
-    allowed_hosts: list[str] = Field(default_factory=lambda: list(DEFAULT_REGISTRIES))
-    allow_dns: bool = True
-
-    @model_validator(mode="before")
-    @classmethod
-    def accept_legacy_allowed_registries(cls, data: object) -> object:
-        if isinstance(data, dict) and "allowed_registries" in data and "allowed_hosts" not in data:
-            data = dict(data)
-            data["allowed_hosts"] = data.pop("allowed_registries")
-        return data
-
-
-class RunPhaseNetwork(BaseModel):
-    policy: Literal["open", "restricted", "offline"] = "open"
+class NetworkConfig(BaseModel):
+    policy: str = "open"
     allowed_hosts: list[str] = Field(default_factory=list)
+    port_forwards: list[PortForward] = Field(default_factory=list)
 
     @field_validator("policy", mode="before")
     @classmethod
@@ -66,12 +54,6 @@ class RunPhaseNetwork(BaseModel):
         if isinstance(v, str):
             return {"allowlist": "restricted", "block": "offline"}.get(v, v)
         return v
-
-
-class NetworkConfig(BaseModel):
-    install_phase: InstallPhaseNetwork = Field(default_factory=InstallPhaseNetwork)
-    run_phase: RunPhaseNetwork = Field(default_factory=RunPhaseNetwork)
-    port_forwards: list[PortForward] = Field(default_factory=list)
 
 
 # ── Resources ───────────────────────────────────────────────────────────
@@ -88,11 +70,17 @@ class VSCodeConfig(BaseModel):
     settings: dict[str, Any] = Field(default_factory=dict)
 
 
-# ── Reinstall ───────────────────────────────────────────────────────────
+# ── Purge ──────────────────────────────────────────────────────────────
 
-class ReinstallConfig(BaseModel):
+class PurgeConfig(BaseModel):
     purge_dirs: list[str] = Field(default_factory=lambda: list(DEFAULT_PURGE_DIRS))
-    commands: list[str] = Field(default_factory=list)  # falls back to setup_commands
+
+
+# ── Build ───────────────────────────────────────────────────────────────
+
+class BuildConfig(BaseModel):
+    dockerfile: str = "Dockerfile"
+    context: str = "."
 
 
 # ── Top-level EnvConfig ─────────────────────────────────────────────────
@@ -104,13 +92,14 @@ class EnvConfig(BaseModel):
     name: str
     version: int = 1
     backend: BackendType = BackendType.PODMAN
-    image: str = "mcr.microsoft.com/devcontainers/base:ubuntu"
+    image: Optional[str] = None
+    build: Optional[BuildConfig] = None
     source: Source
     network: NetworkConfig = Field(default_factory=NetworkConfig)
     env_vars: dict[str, str] = Field(default_factory=dict)
     resources: ResourceLimits = Field(default_factory=ResourceLimits)
     setup_commands: list[str] = Field(default_factory=list)
-    reinstall: ReinstallConfig = Field(default_factory=ReinstallConfig)
+    purge: PurgeConfig = Field(default_factory=PurgeConfig)
     vscode: VSCodeConfig = Field(default_factory=VSCodeConfig)
 
     @field_validator("name")
@@ -123,3 +112,9 @@ class EnvConfig(BaseModel):
                 "Must start with a letter or digit."
             )
         return v
+
+    @model_validator(mode="after")
+    def validate_image_or_build(self) -> EnvConfig:
+        if not self.image and not self.build:
+            raise ValueError("Either 'image' or 'build' must be specified in the configuration.")
+        return self
