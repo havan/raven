@@ -140,7 +140,10 @@ def apply_rules(rule_file: Path, env_name: str, pid: int) -> None:
     # Delete table first so the load is always against a clean slate.
     delete_table(env_name, pid)
     log.info("Applying nftables rules for '%s' (PID %d): %s", env_name, pid, rule_file)
-    run_as_root(["raven-nft-helper", "apply", env_name, str(pid), str(rule_file)])
+    run_as_root(
+        ["raven-nft-helper", "apply", env_name, str(pid), str(rule_file)],
+        capture=False,
+    )
 
 
 def delete_table(env_name: str, pid: int) -> None:

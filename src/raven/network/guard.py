@@ -97,9 +97,11 @@ def apply_guard(
         return
 
     # For registries, restricted, or custom presets:
+    console.print(f"[bold]Resolving guard allowlist: [cyan]{preset_name}[/cyan]...[/bold]")
     cidrs = resolve_preset(preset_name, network_config)
     save_resolved_ips(env_name, cidrs)
     
+    console.print(f"Applying [green]{len(cidrs)}[/green] allowed CIDRs...")
     rule_file = generate_install_rules(env_name, cidrs)
     apply_rules(rule_file, env_name, pid)
     log.info("Guard applied: %s (%d CIDRs allowed)", preset_name, len(cidrs))

@@ -49,14 +49,15 @@ class PodmanBackend(Backend):
 
         # Build image if requested
         if config.build:
-            log.info("Building image from Dockerfile...")
+            from raven.util.console import console
+            console.print(f"[bold]Building local image from [cyan]{config.build.dockerfile}[/cyan]...[/bold]")
             build_name = f"raven-build-{config.name}"
             run([
                 "podman", "build",
                 "-f", config.build.dockerfile,
                 "-t", build_name,
                 config.build.context
-            ])
+            ], capture=False)
             config.image = build_name
 
         ssh_port = _find_free_port()
