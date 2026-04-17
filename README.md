@@ -6,23 +6,24 @@ When you clone repos from GitHub and run `npm install` or `pip install`, every
 package's `postinstall` script runs with your user's full network access. A
 compromised package can exfiltrate credentials, pivot to your host, or silently
 modify your project. Raven puts each project in a rootless Podman container and
-enforces a **two-phase network policy**: during installation, only approved
-package registries are reachable; during development, a configurable policy
-applies. Your host stays untouched.
+enforces a **flexible network guard**: you can switch between policies like
+`registries` (only approved registries), `restricted` (custom allowlist),
+`offline`, or `open` at any time. Your host stays untouched.
 
 ## How it works
 
 ```bash
-raven init myproject https://github.com/owner/repo  # clone + create + prompt for policy
-raven install myproject                              # npm ci / pip install with registry-only network
+raven init myproject https://github.com/owner/repo  # clone + create + prompt for guard
+raven setup myproject                                # run setup_commands under registries guard
 raven shell myproject                                # interactive shell
 raven code myproject                                 # open VS Code via Remote SSH
 ```
 
-During `raven install`, nftables rules are applied inside the container's network
-namespace via `nsenter`. The container can only reach the domains you explicitly
-allow (npm registry, PyPI, GitHub, etc.). Everything else is dropped. When the
-install completes, the run-phase policy takes over automatically.
+Raven uses `nftables` rules applied inside the container's network namespace via
+`nsenter`. The container can only reach the domains you explicitly allow (npm
+registry, PyPI, GitHub, etc.) when a restrictive guard is active. Everything else
+is dropped. You can switch guards on the fly or run one-off commands under a
+specific guard.
 
 ## Requirements
 
@@ -78,35 +79,37 @@ raven init my-node-app https://github.com/owner/my-node-app
 ```
 
 `raven init` clones the repo, detects the package manager from lockfiles, and
-prompts you to choose a run-phase network policy:
+prompts you to choose an initial network guard:
 
 ```text
-Run phase network policy:
+Choose initial network guard:
   1. open       — Full internet access
   2. restricted — Only allowed hosts (configure with raven allow)
   3. offline    — No outbound network access
-Choose policy (number or name) [1]:
+Choose policy [open]:
 ```
 
-2. Install dependencies with network isolation:
+2. Run setup commands with network isolation:
 
 ```bash
-raven install my-node-app
+raven setup my-node-app
 ```
+This runs the `setup_commands` defined in the template (e.g., `npm install`) under the `registries` guard.
 
 3. Work in the environment:
 
 ```bash
-raven shell my-node-app          # interactive shell
-raven code my-node-app           # VS Code Remote SSH
-raven run my-node-app npm test   # run a command
+raven shell my-node-app                  # interactive shell
+raven code my-node-app                   # VS Code Remote SSH
+raven run my-node-app -- npm test        # run a command
+raven run my-node-app -g offline -- env  # run a command while offline
 ```
 
 4. If you need to reach a host that isn't in your allowlist:
 
 ```bash
-raven allow my-node-app deb.debian.org   # add host and apply rules immediately
-raven network status my-node-app         # inspect current policy and active CIDRs
+raven allow my-node-app deb.debian.org   # add host and switch to restricted guard
+raven show my-node-app                   # inspect current guard and status
 ```
 
 ## Commands
@@ -114,21 +117,26 @@ raven network status my-node-app         # inspect current policy and active CID
 | Command | Description |
 |---|---|
 | `raven create <name>` | Create environment from `raven.yaml` (or `--config path`) |
-| `raven init <name> <git-url>` | Clone a repo, detect template, prompt for policy, create environment |
-| `raven start <name>` | Start a stopped environment (applies run-phase policy immediately) |
+| `raven init <name> <git-url>` | Clone a repo, detect template, prompt for guard, create environment |
+| `raven setup <name>` | Run `setup_commands` under a guard (default: `registries`) |
+| `raven start <name>` | Start a stopped environment |
 | `raven stop <name>` | Stop a running environment |
+| `raven restart <name>` | Restart an environment (stop then start) |
 | `raven shell <name>` | Open an interactive shell |
-| `raven install <name>` | Run `setup_commands` with restricted network |
-| `raven reinstall <name>` | Re-run installs on demand (see below) |
-| `raven run <name> <cmd...>` | Run a command inside the environment |
+| `raven run <name> <cmd...>` | Run a command (optional: `-g <guard>`) |
+| `raven purge <name>` | Remove dependency directories (node_modules, etc.) |
+| `raven guard <name> <preset>`| Switch network guard live (open, registries, offline, restricted) |
+| `raven allow <name> <host>` | Add a host to allowlist and switch to restricted guard |
+| `raven fw <name> <mapping>` | Add port forwarding (e.g., `8080:80`) |
+| `raven show <name>` | Detailed status for one environment |
+| `raven ls` | List all environments (alias: `list`) |
+| `raven logs [name]` | Stream or show logs for an environment |
 | `raven code <name>` | Open VS Code via Remote SSH |
-| `raven list` | List all environments with status |
-| `raven ps <name>` | Show processes, ports, and resource usage |
+| `raven top <name>` | Show processes and resource usage |
+| `raven ps [name]` | List environments or show processes for one |
 | `raven export <name>` | Print the config YAML (use `--portable` for sharing) |
+| `raven config` | View or edit configuration interactively |
 | `raven destroy <name>` | Stop and remove the environment |
-| `raven network status <name>` | Show current network policy, allowed hosts, and active CIDRs |
-| `raven network policy <name> <policy>` | Switch run-phase policy live without restarting |
-| `raven allow <name> <host>` | Add a host to the allowlist and apply rules immediately |
 
 ### Global options
 
@@ -138,72 +146,61 @@ raven --debug <command>           # show DEBUG-level messages + subprocess calls
 raven --log-file path.log <cmd>   # write structured JSON Lines log to file
 ```
 
-### raven reinstall
+### Network Guards
 
-When `package.json` or `requirements.txt` changes during development, use
-`reinstall` instead of recreating the environment:
+Raven uses "presets" to control network access. You can switch them live using `raven guard` or use them for one-off commands with `raven run -g`.
 
-```bash
-raven reinstall my-node-app                    # re-run setup_commands
-raven reinstall my-node-app --purge            # remove node_modules first, then reinstall
-raven reinstall my-node-app --cmd "npm ci"     # run a specific command
-raven reinstall my-node-app --purge --yes      # skip confirmation prompt
+| Guard | Effect |
+|---|---|
+| `open` | Full internet access — no restrictions |
+| `registries` | Access to common package registries (npm, PyPI, Go, etc.) |
+| `restricted` | Only `allowed_hosts` defined in your config are reachable |
+| `offline` | No outbound traffic at all |
+
+You can also create **custom presets** by placing a `<name>.yaml` file in:
+1. The current working directory.
+2. `~/.local/share/raven/presets/`.
+
+Example `mypreset.yaml`:
+```yaml
+allowed_hosts:
+  - myapi.example.com
+  - internal-git.corp
 ```
 
-`--purge` removes directories listed in `reinstall.purge_dirs` (defaults:
-`node_modules`, `.venv`, `venv`, `vendor`) relative to the workspace mount path.
+### Port Forwarding
 
-### raven network
-
-Inspect and control the network policy of a running environment without restarting it.
+Add port mappings on the fly:
 
 ```bash
-raven network status myenv              # show phase, policy, allowed hosts, active CIDRs
-raven network policy myenv open         # full internet access
-raven network policy myenv restricted   # only hosts in allowed_hosts
-raven network policy myenv offline      # no outbound traffic
+raven fw my-env 8080:80
+raven restart my-env
 ```
-
-### raven allow
-
-Add a host to the run-phase allowlist and apply the updated rules immediately:
-
-```bash
-raven allow myenv apt.example.com
-```
-
-If the current policy is `open` or `offline`, this automatically switches to
-`restricted` so the allowlist takes effect. The host is saved to `config.yaml`
-and survives restarts.
+*(Note: Podman requires a container restart to apply new port mappings).*
 
 ## Config file reference
 
 ```yaml
 name: my-project           # [a-z0-9][a-z0-9_-]* — must be unique
 version: 1
-backend: podman            # "podman" (default) | "firecracker" (coming soon)
-image: mcr.microsoft.com/devcontainers/base:ubuntu  # any OCI image
+backend: podman            # "podman" (default) | "firecracker"
+
+# Use an existing image:
+image: mcr.microsoft.com/devcontainers/base:ubuntu
+# OR build from a local Dockerfile:
+# build:
+#   dockerfile: Dockerfile
+#   context: .
 
 source:
   type: mount              # "mount" — bind-mount a local directory
   path: /path/to/project   # absolute path on host
   mount_path: /workspace   # path inside container (default: /workspace)
-  # OR:
-  # type: clone            # "clone" — git clone at create time
-  # url: https://github.com/owner/repo
-  # ref: main
 
 network:
-  install_phase:
-    allowed_hosts:         # hostnames reachable during `raven install`
-      - registry.npmjs.org
-      - pypi.org
-      - github.com
-      # full default list covers npm, PyPI, Go, GitHub, and common registries
-    allow_dns: true
-  run_phase:
-    policy: open           # "open" (default) | "restricted" | "offline"
-    allowed_hosts: []      # used when policy=restricted
+  policy: open             # active guard (open, registries, restricted, offline)
+  allowed_hosts:           # used when policy=restricted
+    - myapi.example.com
   port_forwards:
     - host: 3000           # port on your host
       container: 3000      # port inside container
@@ -218,59 +215,20 @@ resources:
   cpus: 4.0                # 0 = no limit
   memory: 4g               # "0" = no limit; accepts "512m", "4g", etc.
 
-setup_commands:            # run sequentially during `raven install`
+setup_commands:            # run sequentially during `raven setup`
   - cd /workspace && npm ci
-  - pip install -r requirements.txt
 
-reinstall:
-  purge_dirs:              # directories removed by `raven reinstall --purge`
+purge:
+  purge_dirs:              # directories removed by `raven purge`
     - node_modules
     - .venv
-  commands:                # override setup_commands for reinstall (optional)
-    - npm ci
 
 vscode:
   extensions:              # installed when `raven code` connects
     - ms-python.python
-    - esbenp.prettier-vscode
   settings:
     editor.formatOnSave: true
 ```
-
-### Network policies
-
-| Policy | Effect |
-|---|---|
-| `open` | Full internet access — nftables table is deleted entirely |
-| `restricted` | Only `allowed_hosts` are reachable; all other outbound traffic is dropped |
-| `offline` | No outbound traffic at all (loopback only) |
-
-The run-phase policy is applied automatically when the container starts. You can
-change it at any time without restarting:
-
-```bash
-raven network policy myenv offline     # lock it down
-raven allow myenv deb.debian.org       # open one host → switches to restricted
-raven network policy myenv open        # full access again
-```
-
-### Default allowed hosts (install phase)
-
-If you don't specify `network.install_phase.allowed_hosts`, raven allows:
-
-- **npm**: `registry.npmjs.org`, `registry.yarnpkg.com`
-- **PyPI**: `pypi.org`, `files.pythonhosted.org`, `bootstrap.pypa.io`
-- **Go**: `proxy.golang.org`, `sum.golang.org`, `storage.googleapis.com`
-- **GitHub**: `github.com`, `objects.githubusercontent.com`,
-  `raw.githubusercontent.com`, `codeload.github.com`
-- **Container registries**: `ghcr.io`, `docker.io` and its auth endpoints
-- **uv**: `astral.sh`
-
-### Backward compatibility
-
-Older config files that use `allowed_registries` (instead of `allowed_hosts`) or
-the policy values `allowlist` / `block` (instead of `restricted` / `offline`)
-are loaded transparently and upgraded to the new names on next save.
 
 ## VS Code integration
 
@@ -287,58 +245,34 @@ container, and writes an SSH config block to `~/.ssh/config`. Running
 code --remote ssh-remote+raven-<name> /workspace
 ```
 
-VS Code installs its server inside the container on first connect. Extensions
-declared in `vscode.extensions` are available after the server is ready.
-
 ## Persistent environments
 
-Environments are managed as **systemd user services** via [Podman Quadlet](https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html).
-When you run `raven create`, raven writes `.container` and `.network` unit files
-to `~/.config/containers/systemd/` and reloads the user daemon. This means:
+Environments are managed as **systemd user services**.
+When you run `raven create`, raven writes a service unit file to `~/.config/systemd/user/`.
 
 - `raven start` / `raven stop` map to `systemctl --user start/stop`
-- Environments with `[Install] WantedBy=default.target` survive reboots
-  automatically
+- Environments survive reboots automatically
 - `loginctl enable-linger` makes them survive logout too
-
-To reproduce an environment on another machine:
-
-```bash
-raven export my-project --portable > raven.yaml
-# copy raven.yaml to the new machine, then:
-raven create my-project --config raven.yaml
-raven install my-project
-```
 
 ## Network isolation: technical details
 
 Raven creates one nftables table per environment (`table inet raven-<name>`)
 with rules applied **inside the container's network namespace** via `nsenter`.
 Rules use the OUTPUT chain so they intercept traffic at the point it leaves the
-container, before it reaches the host. This works correctly with rootless Podman
-+ netavark + pasta, where traffic bypasses the host's FORWARD chain entirely.
-
-The run-phase policy is enforced immediately on `raven start` and whenever
-`raven network policy` or `raven allow` is called. If `sudo nsenter` fails,
-raven logs a warning and continues in degraded mode — no isolation, but the
-container still runs.
-
-During the install phase:
-
-- Allowed hosts are resolved to IP CIDRs. For CDN-backed registries (npm via
-  Cloudflare `104.16.0.0/12`, PyPI via Fastly `151.101.0.0/16`), known stable
-  CIDR ranges are used instead of point-in-time DNS to avoid rules breaking when
-  CDN IPs rotate.
-- DNS (UDP/TCP port 53) is always allowed so hostnames resolve correctly.
-- Loopback traffic (`oifname "lo"`) is always allowed.
-- All other outbound traffic from the container is dropped.
+container.
 
 When `policy: open` applies, raven deletes the table entirely — no restrictions
 remain.
 
-**Limitation:** DNS tunneling (data exfiltration encoded in DNS queries) is not
-blocked by default. This is an advanced attack vector. If you need to defend
-against it, add a DNS rate-limiting rule to your nftables configuration.
+### Default allowed hosts (`registries` guard)
+
+- **npm**: `registry.npmjs.org`, `registry.yarnpkg.com`
+- **PyPI**: `pypi.org`, `files.pythonhosted.org`, `bootstrap.pypa.io`
+- **Go**: `proxy.golang.org`, `sum.golang.org`, `storage.googleapis.com`
+- **GitHub**: `github.com`, `objects.githubusercontent.com`,
+  `raw.githubusercontent.com`, `codeload.github.com`
+- **Container registries**: `ghcr.io`, `docker.io`
+- **uv**: `astral.sh`
 
 ## Development
 
@@ -350,26 +284,8 @@ uv sync --dev
 uv run raven --help
 
 # Run tests
-uv run pytest tests/             # all tests
-uv run pytest tests/unit/        # unit tests only (no Podman needed)
-
-# Lint and type-check
-uv run ruff check src/
-uv run mypy src/
+uv run pytest tests/
 ```
-
-See `examples/` for sample configs for Node.js and Python projects.
-
-## Roadmap
-
-- **Firecracker backend** — microVM isolation (separate kernel) for higher-trust
-  projects
-- `raven config init` — interactive wizard for first-time setup (sudoers,
-  linger, shell completion)
-- DNS-level logging and rate limiting for install phase
-- Image digest pinning warnings
-- `raven update` — pull a new image and recreate the container without
-  destroying the workspace
 
 ## License
 

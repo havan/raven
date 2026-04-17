@@ -27,32 +27,30 @@ uv run mypy src/
 
 ## Architecture
 
-Raven is a CLI tool that creates isolated dev environments (rootless Podman containers) to protect against supply chain attacks. The key idea: `raven install` applies nftables allowlist rules so only approved package registries are reachable while `npm install`/`pip install` runs. After install, the environment reverts to normal network policy.
+Raven is a CLI tool that creates isolated dev environments (rootless Podman containers) to protect against supply chain attacks. The key idea: A flexible **Guard** system applies network isolation (via nftables) to the container. You can switch between presets like `open`, `registries` (for installs), `offline`, or `restricted` (custom allowlist) at any time, or run one-off commands under a specific guard.
 
 ### Core data flow
 
-1. User provides a `raven.yaml` config → validated by `config/schema.py` (Pydantic)
-2. `backends/` owns the lifecycle: `create()` writes Quadlet unit files + `state.json`, `start()` calls `systemctl --user start`
-3. `network/` owns isolation: `phases.py` orchestrates DNS resolution → nftables rule generation → `sudo nft -f` application
-4. State persists to `~/.local/share/raven/envs/<name>/state.json`
+1. User provides a `raven.yaml` config → validated by `config/schema.py` (Pydantic). Supports `image` or `build` (local Dockerfile).
+2. `backends/` owns the lifecycle: `create()` builds images (if needed) and writes a systemd `.service` unit file + `state.json`, `start()` regenerates the unit from config then calls `systemctl --user start`.
+3. `network/` owns isolation: `guard.py` resolves presets (CWD -> `~/.local/share/raven/presets/` -> built-in) → DNS resolution → nftables rule generation → `sudo nsenter` application.
+4. State persists to `~/.local/share/raven/envs/<name>/state.json`. Active guard is stored here.
 
 ### Module responsibilities
 
-- **`config/schema.py`** — Pydantic models for the YAML schema. `EnvConfig` is the top-level model; `Source` is a discriminated union on `source.type` (`mount` vs `clone`).
-- **`config/loader.py`** — `load_config(path)` / `save_config(config)`. Supports `${VAR}` interpolation in `env_vars`.
-- **`config/defaults.py`** — `DEFAULT_REGISTRIES` and `KNOWN_CDN_CIDRS` (CDN CIDR ranges for npm/PyPI/GitHub that are used instead of DNS for stable nftables rules).
-- **`state/store.py`** — `load_state(name)` / `save_state(state)` backed by JSON at the XDG data path. `list_env_names()` scans the envs directory.
-- **`backends/base.py`** — `Backend` ABC. All backends implement: `create`, `start`, `stop`, `destroy`, `exec`, `shell`, `status`, `list_all`, `get_info`, `apply_network_phase`, `setup_vscode`.
-- **`backends/__init__.py`** — `get_backend(config)` factory; maps `BackendType` enum to implementation class.
-- **`backends/podman/backend.py`** — `PodmanBackend`. Uses Quadlet files for systemd integration (not the deprecated `podman generate systemd`). Container name convention: `raven-<envname>`, all containers labelled `raven.managed=true`.
-- **`backends/podman/systemd.py`** — Generates `.container` and `.network` Quadlet files into `~/.config/containers/systemd/`.
-- **`backends/podman/vscode.py`** — SSH keypair generation, injects pubkey into container, writes `~/.ssh/config` block with markers `# raven-begin/<name>` / `# raven-end/<name>`, launches `code --remote ssh-remote+raven-<name>`.
-- **`network/allowlists.py`** — `resolve_allowlist(hostnames)` returns CIDRs; uses `KNOWN_CDN_CIDRS` first, falls back to `dnspython`.
-- **`network/nftables.py`** — Generates `.nft` rule files to `~/.local/share/raven/nft-rules/`. Applies them via `raven-nft-helper`. One nftables table per env (`table inet raven-<name>`), matching on the Podman bridge interface name.
-- **`network/phases.py`** — `switch_phase(env_name, phase, network_config)`. Install phase: resolve IPs → write rule file → apply. Run/open phase: `nft delete table`.
-- **`util/subprocess.py`** — `run()` for captured output, `stream_exec()` for inherited terminal, `exec_replace()` for shell/interactive commands (`os.execvp`).
-- **`util/xdg.py`** — All XDG paths in one place: `data_dir()`, `env_dir(name)`, `nft_rules_dir()`, `quadlet_dir()`.
-- **`cli/app.py`** — Typer app with global `--verbose`/`--debug`/`--log-file` options that call `setup_logging()` before any command runs.
+- **`config/schema.py`** — Pydantic models for the YAML schema. `EnvConfig` supports `image` or `build` (local image building). `NetworkConfig` uses a single `policy` (preset name) and `allowed_hosts`.
+- **`config/loader.py`** — `load_config(path)` / `save_config(config)`. Supports `${VAR}` interpolation.
+- **`config/defaults.py`** — `DEFAULT_REGISTRIES` and `KNOWN_CDN_CIDRS` for stable nftables rules.
+- **`state/store.py`** — `load_state(name)` / `save_state(state)` backed by JSON. Tracks `guard_preset`.
+- **`backends/base.py`** — `Backend` ABC. Methods: `create`, `start`, `stop`, `destroy`, `exec` (with `replace` opt), `shell`, `status`, `list_all`, `apply_guard`, `setup_vscode`.
+- **`backends/podman/backend.py`** — `PodmanBackend`. Handles local image building (`podman build`) and systemd lifecycle.
+- **`backends/podman/systemd.py`** — Generates plain systemd `.service` units.
+- **`network/allowlists.py`** — `resolve_allowlist(hostnames)` returns CIDRs.
+- **`network/nftables.py`** — Generates `.nft` rule files and applies via `raven-nft-helper`.
+- **`network/guard.py`** — `resolve_preset(name)` and `apply_guard(env_name, preset, config, pid)`. Unifies all network isolation logic.
+- **`util/subprocess.py`** — `run()`, `stream_exec()` (inherited terminal), `exec_replace()` (os.execvp).
+- **`util/xdg.py`** — XDG paths: `data_dir()`, `env_dir(name)`, `nft_rules_dir()`, `presets_dir()`, `templates_dir()`.
+- **`cli/app.py`** — Typer app. Commands: `ls` (summary), `show` (alias for `status` - detailed), `run` (supports `-g <guard>`), `guard`, `fw`, `setup`, `purge`.
 
 ### Backend pluggability
 
@@ -70,9 +68,8 @@ A sudoers rule is needed:
 
 > **Security note:** For security, `raven-nft-helper` should be root-owned and located in a protected directory like `/usr/local/bin/`. It validates the environment name, PID, and rule file path before invoking `nsenter` and `nft`.
 
-Rules use the OUTPUT chain (not FORWARD) because rootless Podman with netavark+pasta bypasses the host FORWARD chain entirely. If `sudo nsenter` fails, `apply_network_phase()` logs a warning and continues (degraded mode — no isolation, but the install still runs).
+Rules use the OUTPUT chain (not FORWARD) because rootless Podman with netavark+pasta bypasses the host FORWARD chain entirely. If `sudo nsenter` fails, `apply_guard()` logs a warning and continues (degraded mode — no isolation, but the process still runs).
 
 ### VS Code remote dev
 
 `raven code <name>` uses SSH mode (not devcontainer attach). This makes it backend-agnostic — the same code path will work when Firecracker is implemented. The SSH port is assigned at `raven create` time (random free port stored in `state.json`).
-tored in `state.json`).

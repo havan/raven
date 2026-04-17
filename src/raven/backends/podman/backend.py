@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import socket
-from datetime import datetime, timezone
 from typing import Any
 
 from raven.backends.base import Backend, EnvInfo
@@ -16,7 +15,7 @@ from raven.backends.podman.systemd import (
     remove_service_files,
 )
 from raven.config.schema import EnvConfig, VSCodeConfig
-from raven.state.models import EnvState, EnvStatus, NetworkPhase
+from raven.state.models import EnvState, EnvStatus
 from raven.state.store import delete_state, load_state, save_state, state_exists
 from raven.util.subprocess import exec_replace, run, stream_exec
 
@@ -48,6 +47,19 @@ class PodmanBackend(Backend):
                 "Use 'raven destroy' first."
             )
 
+        # Build image if requested
+        if config.build:
+            from raven.util.console import console
+            console.print(f"[bold]Building local image from [cyan]{config.build.dockerfile}[/cyan]...[/bold]")
+            build_name = f"raven-build-{config.name}"
+            run([
+                "podman", "build",
+                "-f", config.build.dockerfile,
+                "-t", build_name,
+                config.build.context
+            ], capture=False)
+            config.image = build_name
+
         ssh_port = _find_free_port()
         log.info("Assigned SSH port %d for environment '%s'", ssh_port, config.name)
 
@@ -62,10 +74,6 @@ class PodmanBackend(Backend):
         ])
         log.info("Created podman network '%s'", network_name(config.name))
 
-        from raven.backends.podman.network import get_network_interface
-        network_iface = get_network_interface(config.name)
-        log.info("Network bridge interface: %s", network_iface)
-
         # Generate the systemd service unit
         generate_container_service(config, ssh_port)
 
@@ -77,9 +85,6 @@ class PodmanBackend(Backend):
         state = EnvState(
             name=config.name,
             container_id=cname,
-            status=EnvStatus.CREATED,
-            network_name=network_name(config.name),
-            network_interface=network_iface,
             ssh_port=ssh_port,
             backend="podman",
         )
@@ -90,13 +95,19 @@ class PodmanBackend(Backend):
         return cname
 
     def start(self, name: str) -> None:
+        if self.status(name) == EnvStatus.RUNNING:
+            log.warning("Environment '%s' is already running", name)
+            return
+
         state = load_state(name)
-        if state.status == EnvStatus.RUNNING:
-            # Verify it's actually running before trusting state
-            if self.status(name) == EnvStatus.RUNNING:
-                log.warning("Environment '%s' is already running", name)
-                return
-            log.warning("State says running but container is not — restarting")
+
+        # Regenerate the service unit from config so any changes (ports, env,
+        # resources) are always applied before the container starts.
+        from raven.config.loader import load_config
+        from raven.util.xdg import env_dir
+        config = load_config(env_dir(name) / "config.yaml")
+        generate_container_service(config, state.ssh_port)
+        run(["systemctl", "--user", "daemon-reload"])
 
         svc = _service_name(name)
         # Clear any previous failure state so systemd allows a fresh start
@@ -114,24 +125,25 @@ class PodmanBackend(Backend):
         # Wait for container to be running
         self._wait_for_running(name)
 
-        state.status = EnvStatus.RUNNING
-        state.started_at = datetime.now(timezone.utc).isoformat()
-        save_state(state)
+        # Store the actual container ID (hex) so nft_helper can verify cgroup membership.
+        id_result = run(
+            ["podman", "inspect", "--format", "{{.Id}}", container_name(name)],
+            check=False,
+        )
+        if id_result.returncode == 0 and id_result.stdout.strip():
+            state.container_id = id_result.stdout.strip()
+            save_state(state)
 
-        # Apply the configured run-phase network policy now that the container is up.
+        # Apply the configured guard preset now that the container is up.
         try:
-            self.apply_network_phase(name, NetworkPhase.RUN)
+            self.apply_guard(name, config.network.policy)
         except Exception as exc:
-            # Check the configured run policy. If it's not 'open', this failure is fatal.
-            from raven.config.loader import load_config
-            from raven.util.xdg import env_dir
-
-            config = load_config(env_dir(name) / "config.yaml")
-            policy = config.network.run_phase.policy
+            # Check the configured policy. If it's not 'open', this failure is fatal.
+            policy = config.network.policy
 
             if policy != "open":
                 log.error(
-                    "Failed to apply mandatory network policy '%s' for '%s': %s",
+                    "Failed to apply mandatory guard preset '%s' for '%s': %s",
                     policy,
                     name,
                     exc,
@@ -142,7 +154,7 @@ class PodmanBackend(Backend):
             else:
                 # Degraded mode: no isolation but container still runs for "open" policies.
                 log.warning(
-                    "Could not apply network policy on start for '%s' (degraded mode): %s",
+                    "Could not apply guard preset on start for '%s' (degraded mode): %s",
                     name,
                     exc,
                 )
@@ -150,17 +162,12 @@ class PodmanBackend(Backend):
         log.info("Environment '%s' started", name)
 
     def stop(self, name: str, timeout: int = 10) -> None:
-        state = load_state(name)
-        if state.status == EnvStatus.STOPPED:
+        if self.status(name) == EnvStatus.STOPPED:
             log.warning("Environment '%s' is already stopped", name)
             return
 
         svc = _service_name(name)
         run(["systemctl", "--user", "stop", f"{svc}.service"], check=False)
-
-        state.status = EnvStatus.STOPPED
-        state.started_at = None
-        save_state(state)
         log.info("Environment '%s' stopped", name)
 
     def destroy(self, name: str) -> None:
@@ -207,6 +214,7 @@ class PodmanBackend(Backend):
         env: dict[str, str] | None = None,
         tty: bool = False,
         interactive: bool = False,
+        replace: bool = False,
     ) -> int:
         cmd = ["podman", "exec"]
         if tty and interactive:
@@ -226,10 +234,10 @@ class PodmanBackend(Backend):
         cmd.append(container_name(name))
         cmd.extend(command)
 
-        if tty and interactive:
-            # Replace process for interactive use
+        if replace and tty and interactive:
+            # Replace process for interactive use (useful for shell)
             exec_replace(cmd)
-            return 0  # unreachable, but satisfies type checker
+            return 0  # unreachable
         else:
             return stream_exec(cmd)
 
@@ -239,6 +247,7 @@ class PodmanBackend(Backend):
             [shell_binary],
             tty=True,
             interactive=True,
+            replace=True,
         )
 
     def status(self, name: str) -> EnvStatus:
@@ -326,9 +335,9 @@ class PodmanBackend(Backend):
             created_at=data.get("Created", ""),
         )
 
-    def apply_network_phase(self, name: str, phase: NetworkPhase) -> None:
+    def apply_guard(self, name: str, preset: str) -> None:
         from raven.config.loader import load_config
-        from raven.network.phases import switch_phase
+        from raven.network.guard import apply_guard
         from raven.util.xdg import env_dir
 
         state = load_state(name)
@@ -354,8 +363,8 @@ class PodmanBackend(Backend):
                 f"got '{pid_result.stdout.strip()}'"
             )
 
-        switch_phase(name, phase, config.network, pid)
-        state.network_phase = phase
+        apply_guard(name, preset, config.network, pid)
+        state.guard_preset = preset
         save_state(state)
 
     def setup_vscode(self, name: str, config: VSCodeConfig) -> dict[str, str]:
@@ -366,6 +375,43 @@ class PodmanBackend(Backend):
     def launch_vscode(self, name: str, workspace: str) -> None:
         from raven.backends.podman.vscode import launch_vscode
         launch_vscode(name, workspace)
+
+    def get_stats(self, name: str) -> dict[str, str]:
+        """Get live resource usage (CPU, Memory) from Podman."""
+        cname = container_name(name)
+        stats = run(
+            [
+                "podman",
+                "stats",
+                "--no-stream",
+                "--format",
+                "{{.CPUPerc}}\t{{.MemUsage}}",
+                cname,
+            ],
+            check=False,
+        )
+        if stats.returncode == 0 and stats.stdout.strip():
+            parts = stats.stdout.strip().split("\t")
+            if len(parts) >= 2:
+                return {
+                    "cpu": parts[0].strip(),
+                    "memory": parts[1].strip(),
+                }
+        return {"cpu": "-", "memory": "-"}
+
+    def get_started_at(self, name: str) -> str | None:
+        """Return ISO8601 start timestamp from podman inspect, or None if not running."""
+        result = run(
+            ["podman", "inspect", "--format", "{{.State.StartedAt}}", container_name(name)],
+            check=False,
+        )
+        if result.returncode != 0:
+            return None
+        ts = result.stdout.strip()
+        # Podman returns zero time when container hasn't started
+        if not ts or ts.startswith("0001-01-01"):
+            return None
+        return ts
 
     def _wait_for_running(self, name: str, timeout: int = 30) -> None:
         """Poll until the container is running."""

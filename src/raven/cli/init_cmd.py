@@ -10,6 +10,7 @@ from typing import Optional
 
 import typer
 import yaml
+import questionary
 from pydantic import ValidationError
 from rich.panel import Panel
 
@@ -146,7 +147,7 @@ def init(
 
             if normalize(current_remote) != normalize(git_url):
                 console.print(f"[red]Error:[/red] Workspace already exists at {workspace_dir} but points to a different remote: {current_remote}")
-                console.print(f"Please use a different environment name or remove the existing directory.")
+                console.print("Please use a different environment name or remove the existing directory.")
                 raise typer.Exit(1)
 
             console.print(f"[yellow]Note:[/yellow] Workspace already exists at {workspace_dir} and matches remote — skipping clone.")
@@ -170,16 +171,14 @@ def init(
     if not selected_template:
         console.print("\n[bold]No project template detected.[/bold]")
         _tpl_choices = sorted(list(set(t.split(".")[0] for t in DEFAULT_TEMPLATES.keys())))
-        for i, t in enumerate(_tpl_choices, 1):
-            console.print(f"  {i}. [cyan]{t}[/cyan]")
-        _raw_tpl = typer.prompt("Choose template (number or name)", default="1")
-        try:
-            idx = int(_raw_tpl) - 1
-            if idx < 0 or idx >= len(_tpl_choices):
-                raise IndexError
-            selected_template = _tpl_choices[idx]
-        except (ValueError, IndexError):
-            selected_template = _raw_tpl if _raw_tpl in _tpl_choices else "npm"
+        selected_template = questionary.select(
+            "Choose template:",
+            choices=_tpl_choices + ["other"],
+            default=_tpl_choices[0]
+        ).ask()
+
+        if selected_template == "other":
+            selected_template = questionary.text("Enter template name:").ask()
 
     template_file = templates_dir() / f"{selected_template}.yaml"
 
@@ -196,31 +195,29 @@ def init(
             console.print(f"[red]Error parsing template {template_file}:[/red] {e}")
             raise typer.Exit(1)
 
-    # 3. Prompt for run-phase network policy
+    # 3. Prompt for initial network guard
     _policy_choices = ["open", "restricted", "offline"]
     _policy_descriptions = {
         "open": "Full internet access",
         "restricted": "Only allowed hosts (configure with raven allow)",
         "offline": "No outbound network access",
     }
-    console.print("\n[bold]Run phase network policy:[/bold]")
-    for i, p in enumerate(_policy_choices, 1):
-        console.print(f"  {i}. [cyan]{p}[/cyan] — {_policy_descriptions[p]}")
-
-    _raw_policy = typer.prompt("Choose policy (number or name)", default="1")
-    try:
-        idx = int(_raw_policy) - 1
-        if idx < 0 or idx >= len(_policy_choices):
-            raise IndexError
-        _chosen_policy = _policy_choices[idx]
-    except (ValueError, IndexError):
-        _chosen_policy = _raw_policy if _raw_policy in _policy_choices else "open"
+    
+    _chosen_policy = questionary.select(
+        "Choose initial network guard:",
+        choices=[
+            questionary.Choice(f"{p} — {_policy_descriptions[p]}", value=p)
+            for p in _policy_choices
+        ],
+        default="open"
+    ).ask()
 
     _initial_allowed_hosts: list[str] = []
     if _chosen_policy == "restricted":
-        _hosts_raw = typer.prompt(
-            "Initial allowed hosts (comma-separated, or Enter to skip)", default=""
-        )
+        _hosts_raw = questionary.text(
+            "Initial allowed hosts (comma-separated, or leave empty to skip):",
+            default=""
+        ).ask()
         if _hosts_raw.strip():
             _initial_allowed_hosts = [h.strip() for h in _hosts_raw.split(",") if h.strip()]
 
@@ -238,12 +235,11 @@ def init(
         if k not in ("name", "source"):
             cfg_dict[k] = v
 
-    # Apply chosen run-phase policy (overrides any template default)
+    # Apply chosen guard (overrides any template default)
     cfg_dict.setdefault("network", {})
-    cfg_dict["network"].setdefault("run_phase", {})
-    cfg_dict["network"]["run_phase"]["policy"] = _chosen_policy
+    cfg_dict["network"]["policy"] = _chosen_policy
     if _initial_allowed_hosts:
-        cfg_dict["network"]["run_phase"]["allowed_hosts"] = _initial_allowed_hosts
+        cfg_dict["network"]["allowed_hosts"] = _initial_allowed_hosts
 
     try:
         cfg = EnvConfig.model_validate(cfg_dict)
@@ -267,11 +263,11 @@ def init(
     console.print(Panel(
         f"[bold green]Environment initialized and created:[/bold green] {cfg.name}\n"
         f"[dim]Template:[/dim] {selected_template}\n"
-        f"[dim]Run policy:[/dim] {_chosen_policy}\n"
+        f"[dim]Initial Guard:[/dim] {_chosen_policy}\n"
         f"[dim]Workspace:[/dim] {workspace_dir}\n"
         f"[dim]Config:[/dim] {config_path}\n"
         f"[dim]Container:[/dim] {container_id}",
         title="raven init",
         border_style="green",
     ))
-    console.print(f"You can now run [cyan]raven start {name}[/cyan] or [cyan]raven install {name}[/cyan].")
+    console.print(f"You can now run [cyan]raven start {name}[/cyan] and then [cyan]raven setup {name}[/cyan].")

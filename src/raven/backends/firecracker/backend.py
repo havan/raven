@@ -48,5 +48,11 @@ class FirecrackerBackend(Backend):
     def launch_vscode(self, name: str, workspace: str) -> None:
         raise NotImplementedError(_NOT_IMPLEMENTED)
 
+    def get_stats(self, name: str) -> dict[str, str]:
+        raise NotImplementedError(_NOT_IMPLEMENTED)
+
     def get_processes(self, name: str) -> dict[str, Any]:
+        raise NotImplementedError(_NOT_IMPLEMENTED)
+
+    def get_started_at(self, name: str) -> str | None:
         raise NotImplementedError(_NOT_IMPLEMENTED)

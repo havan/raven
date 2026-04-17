@@ -38,6 +38,11 @@ def templates_dir() -> Path:
     return data_dir() / "templates"
 
 
+def presets_dir() -> Path:
+    """~/.local/share/raven/presets/"""
+    return data_dir() / "presets"
+
+
 def quadlet_dir() -> Path:
     """~/.config/containers/systemd/ (legacy Quadlet files)"""
     return Path.home() / ".config" / "containers" / "systemd"
@@ -57,6 +62,6 @@ def git_root() -> Path:
 def ensure_dirs() -> None:
     """Create all required directories if they don't exist."""
     for d in [data_dir(), data_dir() / "envs", data_dir() / "networks",
-              nft_rules_dir(), logs_dir(), templates_dir(),
+              nft_rules_dir(), logs_dir(), templates_dir(), presets_dir(),
               quadlet_dir(), user_service_dir()]:
         d.mkdir(parents=True, exist_ok=True)
